@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf %}
+{% from "brand.html" import lockup %}
+{% block title %}Create account{% endblock %}
+{% block body %}
+<div class="auth x-auth-wrap">
+  <section class="auth-form">
+    <div class="auth-top">
+      {{ lockup('', url_for('views.landing')) }}
+      <div class="row"><a class="btn ghost sm" href="{{ url_for('views.landing') }}">← Product page</a><button class="icon-btn" data-theme-toggle aria-label="Toggle theme">{{ icon('sun') }}</button></div>
+    </div>
+    <div class="auth-card">
+      <div class="eyebrow">New organization</div>
+      <h1 data-split-h>Create your workspace</h1>
+      <p class="muted" style="margin:8px 0 28px">You become the admin of a new organization.</p>
+      <form method="post" novalidate>
+        {{ csrf() }}
+        <div class="field"><label for="full_name">Full name</label><input type="text" id="full_name" name="full_name" value="{{ form.get('full_name', '') }}" required></div>
+        <div class="field"><label for="email">Work email</label><input type="email" id="email" name="email" value="{{ form.get('email', '') }}" required></div>
+        <div class="field"><label for="org_name">Organization</label><input type="text" id="org_name" name="org_name" value="{{ form.get('org_name', '') }}" required></div>
+        <div class="grid g-2" style="gap:12px">
+          <div class="field"><label for="password">Password</label><input type="password" id="password" name="password" autocomplete="new-password" required></div>
+          <div class="field"><label for="confirm">Confirm</label><input type="password" id="confirm" name="confirm" autocomplete="new-password" required></div>
+        </div>
+        <div class="hint" style="margin:-6px 0 16px">{{ rules }}</div>
+        <button class="btn primary block lg" type="submit">Create workspace</button>
+      </form>
+      <p class="muted small" style="margin-top:20px">Already have an account? <a class="link" href="{{ url_for('auth.login') }}">Sign in</a></p>
+    </div>
+    <div class="auth-bottom"><span>ShieldIQ · portfolio project</span><span>Runs locally · your data stays on your machine</span></div>
+  </section>
+  {% include "auth/_hero.html" %}
+</div>
+{% endblock %}
+{% block vendor_scripts %}{% endblock %}

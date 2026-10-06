@@ -1,0 +1,21 @@
+{% from "_iso.html" import module %}
+{# Sign-in side panel (round 5): the ShieldIQ module on a blueprint field, the one-line promise in the wide face,
+   and three real numbers in hairline cells. #}
+<section class="auth-hero x-auth" aria-label="About ShieldIQ">
+  
+  <div class="xa-copy">
+    <h2 class="xa-h">Find the holes in your <em>cloud</em></h2>
+    <p class="lead">Before attackers do. Connect a cloud account, scan it, and fix what matters in one click.</p>
+  </div>
+  <figure class="xa-obj" aria-hidden="true">
+    
+    <div class="xa-mod">{{ module() }}</div>
+    
+  </figure>
+  <dl class="ah-spec xa-spec">
+    <div><dt>{{ PRODUCT.checks }}</dt><dd>security checks</dd></div>
+    <div><dt>{{ PRODUCT.frameworks }}</dt><dd>frameworks</dd></div>
+    <div><dt>{{ PRODUCT.providers }}</dt><dd>platforms</dd></div>
+  </dl>
+  <div class="ah-foot">A student portfolio project · runs locally · no paid APIs required</div>
+</section>

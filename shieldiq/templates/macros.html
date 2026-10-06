@@ -1,0 +1,85 @@
+{% set ICONS = {
+ 'shield': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+ 'grid': '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+ 'alert': '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+ 'check': '<path d="M20 6 9 17l-5-5"/>',
+ 'check-circle': '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+ 'route': '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+ 'plug': '<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a6 6 0 0 1-12 0V8z"/>',
+ 'scan': '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
+ 'sparkles': '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 3v4M17 5h4M5 17v4M3 19h4"/>',
+ 'file': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+ 'bell': '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
+ 'list': '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+ 'settings': '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+ 'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+ 'search': '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+ 'sun': '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+ 'moon': '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+ 'refresh': '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
+ 'logout': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+ 'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+ 'upload': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+ 'trash': '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
+ 'plus': '<path d="M12 5v14M5 12h14"/>',
+ 'git': '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"/>',
+ 'terminal': '<path d="m4 17 6-6-6-6M12 19h8"/>',
+ 'code': '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
+ 'key': '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+ 'lock': '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+ 'globe': '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20"/>',
+ 'server': '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/>',
+ 'database': '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.7-4 3-9 3s-9-1.3-9-3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/>',
+ 'user': '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+ 'flame': '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3.3.4 1.4 1.7 2.8 2.5 2.8z"/>',
+ 'target': '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+ 'book': '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z"/><path d="M20 17v5H6.5A2.5 2.5 0 0 1 4 19.5"/>',
+ 'activity': '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+ 'zap': '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+ 'x': '<path d="M18 6 6 18M6 6l12 12"/>',
+ 'menu': '<path d="M3 12h18M3 6h18M3 18h18"/>',
+ 'eye': '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
+ 'send': '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+ 'clock': '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+ 'layers': '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+ 'api': '<path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/>',
+ 'chevron': '<path d="m9 18 6-6-6-6"/>',
+ 'external': '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/>',
+ 'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/>'
+} %}
+{% macro icon(name, cls='') -%}
+<svg class="svg-ic {{ cls }}" viewBox="0 0 24 24" aria-hidden="true">{{ ICONS.get(name, ICONS['shield'])|safe }}</svg>
+{%- endmacro %}
+{% macro sev(s) -%}<span class="badge sev-{{ s }}">{{ s }}</span>{%- endmacro %}
+{% macro status(s) -%}<span class="badge st-{{ s }}">{{ s|replace('_', ' ') }}</span>{%- endmacro %}
+{% set PROV_ABBR = {'aws': 'AWS', 'gcp': 'GCP', 'azure': 'AZ', 'github': 'GH', 'slack': 'SL', 'kubernetes': 'K8s', 'code': '{ }'} %}
+{% macro prov(p, cls='') -%}<span class="prov prov-{{ p }} {{ cls }}" title="{{ PROVIDERS[p].label if p in PROVIDERS else p }}">{{ PROV_ABBR.get(p, (PROVIDERS[p].short if p in PROVIDERS else p)[:3]) }}</span>{%- endmacro %}
+{% macro ring(value, cls='', label='/ 100') -%}
+{# A score is a number with a scale, not a decorative ring: big mono figure, a 0-100 meter with the 40/60/80 bands marked. #}
+{% set v = value if value is not none else 0 %}
+<div class="score-block {{ cls }}">
+  <div class="score-line"><span class="score-num">{{ value if value is not none else '–' }}</span><span class="score-of">{{ label }}</span></div>
+  <div class="meter" role="img" aria-label="{{ v }} out of 100"><span style="width:{{ v }}%"></span><i class="tick" style="left:40%"></i><i class="tick" style="left:60%"></i><i class="tick" style="left:80%"></i></div>
+  <div class="meter-scale"><span>0</span><span>40</span><span>60</span><span>80</span><span>100</span></div>
+</div>
+{%- endmacro %}
+
+{% macro gauge(value, label='Security score', sub='/ 100', cls='') -%}
+{# An instrument dial: 270° scale with the 40/60/80 band edges marked; the arc is the score, coloured by
+   its band (red = critical exposure ... slate = strong). It sweeps from 0 on load so you read it as a position. #}
+{% set v = value if value is not none else 0 %}{% set b = score_band(value) %}
+{% set R = 96 %}{% set C = (2 * 3.14159265 * R) %}{% set A = C * 0.75 %}
+<div class="gauge sev-{{ b.sev }} {{ cls }}" data-gauge="{{ v }}" role="img" aria-label="{{ label }} {{ v }} out of 100, {{ b.label }}">
+  <svg viewBox="0 0 240 240" aria-hidden="true">
+    <g transform="rotate(135 120 120)">
+      <circle class="g-track" cx="120" cy="120" r="{{ R }}" stroke-dasharray="{{ A|round(2) }} {{ C|round(2) }}"/>
+      <circle class="g-fill" data-gauge-arc cx="120" cy="120" r="{{ R }}" stroke-dasharray="{{ (A * v / 100)|round(2) }} {{ C|round(2) }}" data-a="{{ A|round(2) }}" data-c="{{ C|round(2) }}"/>
+    </g>
+    {% for t in range(0, 101, 5) %}{% set ang = (135 + 270 * t / 100) * 3.14159265 / 180 %}{% set r1 = 112 if t % 20 == 0 else 109 %}
+    <line class="g-tick {{ 'major' if t % 20 == 0 }} {{ 'edge' if t in (40, 60, 80) }}" x1="{{ (120 + 104 * ang|cos)|round(2) }}" y1="{{ (120 + 104 * ang|sin)|round(2) }}" x2="{{ (120 + r1 * ang|cos)|round(2) }}" y2="{{ (120 + r1 * ang|sin)|round(2) }}"/>{% endfor %}
+  </svg>
+  <div class="g-center"><span class="g-k">{{ label }}</span><b class="g-num" data-odo="{{ value if value is not none else '–' }}">{{ value if value is not none else '–' }}</b><span class="g-sub">{{ sub }}</span></div>
+</div>
+{%- endmacro %}
+{% macro band(score) -%}{% set b = score_band(score) %}<span class="band"><i class="sq {{ b.sev }}"></i>{{ b.label }}</span>{%- endmacro %}
+{% macro csrf() -%}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{%- endmacro %}

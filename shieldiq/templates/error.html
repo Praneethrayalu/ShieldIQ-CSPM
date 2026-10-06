@@ -1,0 +1,31 @@
+{% extends "base.html" if current_user.is_authenticated else "auth/bare.html" %}
+{% from "macros.html" import icon %}
+{% from "brand.html" import lockup %}
+{% block title %}{{ title }}{% endblock %}
+{% block body_class %}{{ '' if current_user.is_authenticated else 'err-page' }}{% endblock %}
+{% block content %}
+{# The error is drawn in the product's own language: the route you asked for is a path, and it breaks here. #}
+<div class="err-wrap">
+  {% if not current_user.is_authenticated %}<div class="err-brand">{{ lockup('', url_for('views.dashboard')) }}</div>{% endif %}
+  <span class="pill"><i class="pill-dot {{ 'warn' }}"></i>Error {{ code }}</span>
+  <div class="err-code" aria-hidden="true">{{ code }}</div>
+  <svg class="err-art" viewBox="0 0 520 90" aria-hidden="true">
+    <line class="ea-e" x1="40" y1="40" x2="236" y2="40"/>
+    <line class="ea-e ea-dim" x1="284" y1="40" x2="480" y2="40"/>
+    <circle class="ea-n" cx="40" cy="40" r="8"/><circle class="ea-n" cx="160" cy="40" r="6"/><circle class="ea-n ea-off" cx="360" cy="40" r="6"/><rect class="ea-n ea-off" x="469" y="29" width="22" height="22" rx="6"/>
+    <line class="ea-cut" x1="248" y1="60" x2="272" y2="20"/>
+    <text x="40" y="78" text-anchor="middle">you</text><text x="480" y="78" text-anchor="middle">{{ 'that page' if code == 404 else 'that action' }}</text>
+  </svg>
+  <h1>{{ title }}</h1>
+  <p class="err-msg">{{ message }}</p>
+  <div class="row err-actions">
+    {% if current_user.is_authenticated %}
+    <a class="btn primary" href="{{ url_for('views.dashboard') }}">Back to dashboard</a>
+    <a class="btn" href="{{ url_for('views.findings') }}">Findings</a>
+    {% else %}
+    <a class="btn primary" href="{{ url_for('views.dashboard') }}">Back home</a>
+    <a class="btn" href="{{ url_for('auth.login') }}">Sign in</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

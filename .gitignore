@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets and local config (copy .env.example to .env)
+.env
+.env.*
+!.env.example
+
+# Runtime data: SQLite DB, generated secrets, PDF reports
+instance/
+*.db
+*.sqlite
+*.sqlite3
+reports/
+validation/out/
+validation_report.*
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

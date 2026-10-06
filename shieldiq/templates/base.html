@@ -1,0 +1,108 @@
+{% from "macros.html" import icon, csrf %}{% from "brand.html" import mark, wordmark %}<!doctype html>
+<html lang="en" data-theme="{{ current_user.theme if current_user.is_authenticated else 'light' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="theme-color" content="#e4e4e1">
+  <meta name="description" content="ShieldIQ: cloud security posture management with attack paths, compliance mapping and verified auto-fix.">
+  <title>{% block title %}Dashboard{% endblock %} · ShieldIQ</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/logo.svg') }}" type="image/svg+xml">
+  <link rel="preload" href="{{ url_for('static', filename='vendor/inter-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ url_for('static', filename='vendor/archivo-latin-wdth-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ APP_VERSION }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/siq.css') }}?v={{ APP_VERSION }}">
+  {% block head %}{% endblock %}
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<div class="navbar-progress" aria-hidden="true"></div>
+{% block body %}
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="{{ url_for('views.dashboard') }}">
+      <span class="lockup-tile">{{ mark() }}</span>
+      <span><div class="brand-name">{{ wordmark() }}</div><div class="brand-sub">cloud security posture</div></span>
+    </a>
+    {% set ep = request.endpoint %}
+    <nav class="nav">
+      <div class="nav-group">Overview</div>
+      <a href="{{ url_for('views.dashboard') }}" class="{{ 'active' if ep == 'views.dashboard' }}">{{ icon('grid') }} Dashboard</a>
+      <a href="{{ url_for('views.attack_paths') }}" class="{{ 'active' if ep == 'views.attack_paths' }}">{{ icon('route') }} Attack paths</a>
+      <div class="nav-group">Security</div>
+      <a href="{{ url_for('views.findings') }}" class="{{ 'active' if ep in ('views.findings', 'views.finding_detail') }}">{{ icon('alert') }} Findings</a>
+      <a href="{{ url_for('views.compliance') }}" class="{{ 'active' if ep == 'views.compliance' }}">{{ icon('check-circle') }} Compliance</a>
+      <a href="{{ url_for('views.integrations') }}" class="{{ 'active' if ep == 'views.integrations' }}">{{ icon('plug') }} Integrations</a>
+      <a href="{{ url_for('views.scanners') }}" class="{{ 'active' if ep == 'views.scanners' }}">{{ icon('scan') }} IaC &amp; secret scan</a>
+      <a href="{{ url_for('views.rules_catalog') }}" class="{{ 'active' if ep == 'views.rules_catalog' }}">{{ icon('book') }} Rule library</a>
+      <div class="nav-group">Analysis</div>
+      <a href="{{ url_for('views.copilot_page') }}" class="{{ 'active' if ep == 'views.copilot_page' }}">{{ icon('sparkles') }} Security Copilot</a>
+      <a href="{{ url_for('views.reports_page') }}" class="{{ 'active' if ep == 'views.reports_page' }}">{{ icon('file') }} Reports</a>
+      <a href="{{ url_for('views.alerts') }}" class="{{ 'active' if ep == 'views.alerts' }}">{{ icon('bell') }} Alerts {% if unread_alerts %}<span class="count">{{ unread_alerts }}</span>{% endif %}</a>
+      <div class="nav-group">Workspace</div>
+      {% if current_user.can('admin') %}
+      <a href="{{ url_for('views.audit_log') }}" class="{{ 'active' if ep == 'views.audit_log' }}">{{ icon('list') }} Audit log</a>
+      <a href="{{ url_for('views.users') }}" class="{{ 'active' if ep == 'views.users' }}">{{ icon('users') }} Team</a>
+      {% endif %}
+      <a href="{{ url_for('views.api_docs') }}" class="{{ 'active' if ep == 'views.api_docs' }}">{{ icon('api') }} REST API</a>
+      <a href="{{ url_for('views.settings') }}" class="{{ 'active' if ep == 'views.settings' }}">{{ icon('settings') }} Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <span class="org-dot">{{ (current_user.org.name or '?')[:1]|upper }}</span>
+      <div style="min-width:0"><b class="ellipsis" style="display:block;color:var(--ink)">{{ current_user.org.name }}</b>
+        <div class="tiny mono">{{ current_user.role }} · <a class="link" href="{{ url_for('views.landing') }}">about</a></div></div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-toggle" data-toggle-sidebar aria-label="Menu">{{ icon('menu') }}</button>
+      <button class="search-btn" data-open-palette>{{ icon('search', 'sm') }} <span class="lbl">Search findings, pages, actions…</span> <span class="kbd">Ctrl K</span></button>
+      <div class="top-actions">
+        {% if current_user.can('scan') %}
+        <form method="post" action="{{ url_for('views.scan_everything') }}" data-loading="Scanning…">
+          {{ csrf() }}<input type="hidden" name="next" value="{{ request.full_path }}">
+          <button class="btn primary sm" type="submit">{{ icon('refresh', 'sm') }} <span class="lbl">Scan all</span></button>
+        </form>
+        {% endif %}
+        <button class="icon-btn" data-theme-toggle aria-label="Toggle theme">{{ icon('sun') }}</button>
+        <a class="icon-btn" href="{{ url_for('views.alerts') }}" aria-label="Alerts">{{ icon('bell') }}{% if unread_alerts %}<span class="dot">{{ unread_alerts if unread_alerts < 100 else '99+' }}</span>{% endif %}</a>
+        <div class="user-menu" data-user-menu>
+          <button class="avatar" aria-label="Account">{{ current_user.initials }}</button>
+          <div class="menu">
+            <div style="padding:8px 10px 10px"><b class="small">{{ current_user.full_name }}</b><div class="tiny muted">{{ current_user.email }}</div></div>
+            <a href="{{ url_for('views.settings') }}">{{ icon('settings', 'sm') }} Settings</a>
+            <a href="{{ url_for('views.api_docs') }}">{{ icon('api', 'sm') }} API tokens &amp; docs</a>
+            <form method="post" action="{{ url_for('auth.logout') }}">{{ csrf() }}<button type="submit">{{ icon('logout', 'sm') }} Sign out</button></form>
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<div class="modal palette" id="palette" data-modal>
+  <div class="modal-card">
+    <input type="search" id="palette-input" placeholder="Type a command or search findings…" autocomplete="off">
+    <div class="pal-list" id="palette-list"></div>
+  </div>
+</div>
+<script type="application/json" id="nav-data">{{ {
+  'Dashboard': url_for('views.dashboard'), 'Findings': url_for('views.findings'), 'Critical findings': url_for('views.findings', severity='critical'),
+  'Attack paths': url_for('views.attack_paths'), 'Compliance': url_for('views.compliance'), 'Integrations': url_for('views.integrations'),
+  'IaC & secret scanner': url_for('views.scanners'), 'Rule library': url_for('views.rules_catalog'), 'Security Copilot': url_for('views.copilot_page'),
+  'Reports': url_for('views.reports_page'), 'Alerts': url_for('views.alerts'), 'Settings': url_for('views.settings'), 'REST API docs': url_for('views.api_docs'),
+  'Export findings (CSV)': url_for('views.export_findings', fmt='csv'), 'Product page': url_for('views.landing'), 'Setup guides': url_for('views.guides')
+}|tojson }}</script>
+{% endblock %}
+{% with msgs = get_flashed_messages(with_categories=true) %}{% if msgs %}
+<div class="flashes">{% for cat, m in msgs %}<div class="flash {{ cat }}" data-flash><span>{{ m }}</span><button class="x" data-dismiss aria-label="Dismiss">×</button></div>{% endfor %}</div>
+{% endif %}{% endwith %}
+{% block vendor_scripts %}{% endblock %}
+<script src="{{ url_for('static', filename='js/motion.js') }}?v={{ APP_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ APP_VERSION }}"></script>
+<script src="{{ url_for('static', filename='js/app-motion.js') }}?v={{ APP_VERSION }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
