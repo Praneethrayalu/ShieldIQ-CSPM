@@ -1,0 +1,282 @@
+{
+  "account_id": "123456789012",
+  "region": "ap-south-1",
+  "account_alias": "acme-production",
+  "account": {
+    "root_mfa": false,
+    "root_access_keys": false,
+    "password_policy": {
+      "min_length": 8,
+      "reuse_prevention": 0
+    }
+  },
+  "s3_buckets": [
+    {
+      "name": "acme-customer-exports",
+      "public_access_block": {
+        "block_public_acls": false,
+        "ignore_public_acls": false,
+        "block_public_policy": false,
+        "restrict_public_buckets": false
+      },
+      "acl_public": true,
+      "policy_public": false,
+      "encryption": null,
+      "versioning": false,
+      "tags": {
+        "data": "sensitive"
+      }
+    },
+    {
+      "name": "acme-app-logs",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      },
+      "acl_public": false,
+      "policy_public": false,
+      "encryption": "AES256",
+      "versioning": false,
+      "tags": {}
+    },
+    {
+      "name": "acme-db-backups",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": true,
+        "restrict_public_buckets": true
+      },
+      "acl_public": false,
+      "policy_public": false,
+      "encryption": "aws:kms",
+      "versioning": true,
+      "tags": {
+        "data": "sensitive"
+      }
+    },
+    {
+      "name": "acme-marketing-site",
+      "public_access_block": {
+        "block_public_acls": true,
+        "ignore_public_acls": true,
+        "block_public_policy": false,
+        "restrict_public_buckets": false
+      },
+      "acl_public": false,
+      "policy_public": true,
+      "encryption": "AES256",
+      "versioning": true,
+      "tags": {}
+    }
+  ],
+  "iam_users": [
+    {
+      "name": "admin-backup",
+      "console_access": true,
+      "mfa_enabled": false,
+      "attached_policies": [
+        "AdministratorAccess"
+      ],
+      "access_keys": [
+        {
+          "id": "AKIA****BKP1",
+          "age_days": 214,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "ci-deployer",
+      "console_access": false,
+      "mfa_enabled": false,
+      "attached_policies": [
+        "PowerUserAccess"
+      ],
+      "access_keys": [
+        {
+          "id": "AKIA****CI01",
+          "age_days": 124,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "praneeth.dev",
+      "console_access": true,
+      "mfa_enabled": true,
+      "attached_policies": [
+        "DeveloperAccess"
+      ],
+      "access_keys": [
+        {
+          "id": "AKIA****DEV1",
+          "age_days": 21,
+          "active": true
+        }
+      ]
+    },
+    {
+      "name": "security-auditor",
+      "console_access": true,
+      "mfa_enabled": true,
+      "attached_policies": [
+        "SecurityAudit"
+      ],
+      "access_keys": []
+    }
+  ],
+  "iam_roles": [
+    {
+      "name": "bastion-role",
+      "policies": [
+        "AdministratorAccess"
+      ],
+      "trusted_service": "ec2.amazonaws.com"
+    },
+    {
+      "name": "web-app-role",
+      "policies": [
+        "AmazonS3FullAccess",
+        "AmazonRDSDataFullAccess"
+      ],
+      "trusted_service": "ec2.amazonaws.com"
+    },
+    {
+      "name": "lambda-thumbnailer",
+      "policies": [
+        "AWSLambdaBasicExecutionRole"
+      ],
+      "trusted_service": "lambda.amazonaws.com"
+    }
+  ],
+  "security_groups": [
+    {
+      "id": "sg-0a1b2c3d4e5f60001",
+      "name": "launch-wizard-1",
+      "ingress": [
+        {
+          "protocol": "tcp",
+          "from": 22,
+          "to": 22,
+          "cidr": "0.0.0.0/0"
+        }
+      ]
+    },
+    {
+      "id": "sg-0a1b2c3d4e5f60002",
+      "name": "web-https",
+      "ingress": [
+        {
+          "protocol": "tcp",
+          "from": 443,
+          "to": 443,
+          "cidr": "0.0.0.0/0"
+        }
+      ]
+    },
+    {
+      "id": "sg-0a1b2c3d4e5f60003",
+      "name": "dev-sandbox-open",
+      "ingress": [
+        {
+          "protocol": "-1",
+          "from": 0,
+          "to": 65535,
+          "cidr": "0.0.0.0/0"
+        }
+      ]
+    },
+    {
+      "id": "sg-0a1b2c3d4e5f60004",
+      "name": "db-private",
+      "ingress": [
+        {
+          "protocol": "tcp",
+          "from": 5432,
+          "to": 5432,
+          "cidr": "10.0.0.0/16"
+        }
+      ]
+    }
+  ],
+  "ec2_instances": [
+    {
+      "id": "i-0bastion7f3a9d7b42",
+      "name": "bastion-host",
+      "security_groups": [
+        "sg-0a1b2c3d4e5f60001"
+      ],
+      "public_ip": "13.233.10.24",
+      "imdsv2_required": false,
+      "instance_profile_role": "bastion-role",
+      "ebs_encrypted": false
+    },
+    {
+      "id": "i-0web5c1e2d3f4a5b6",
+      "name": "web-1",
+      "security_groups": [
+        "sg-0a1b2c3d4e5f60002"
+      ],
+      "public_ip": "13.233.10.25",
+      "imdsv2_required": true,
+      "instance_profile_role": "web-app-role",
+      "ebs_encrypted": true
+    },
+    {
+      "id": "i-0dev9a8b7c6d5e4f3",
+      "name": "dev-sandbox",
+      "security_groups": [
+        "sg-0a1b2c3d4e5f60003"
+      ],
+      "public_ip": "13.233.10.99",
+      "imdsv2_required": false,
+      "instance_profile_role": "web-app-role",
+      "ebs_encrypted": false
+    }
+  ],
+  "rds_instances": [
+    {
+      "id": "acme-prod-db",
+      "engine": "postgres",
+      "publicly_accessible": false,
+      "storage_encrypted": false,
+      "backup_retention_days": 3,
+      "security_groups": [
+        "sg-0a1b2c3d4e5f60004"
+      ],
+      "tags": {
+        "data": "sensitive"
+      }
+    },
+    {
+      "id": "acme-analytics-db",
+      "engine": "mysql",
+      "publicly_accessible": true,
+      "storage_encrypted": true,
+      "backup_retention_days": 7,
+      "security_groups": [
+        "sg-0a1b2c3d4e5f60003"
+      ],
+      "tags": {}
+    }
+  ],
+  "cloudtrail": {
+    "enabled": true,
+    "multi_region": false,
+    "log_file_validation": false
+  },
+  "kms_keys": [
+    {
+      "id": "mrk-1a2b3c4d",
+      "rotation_enabled": false
+    },
+    {
+      "id": "mrk-5e6f7a8b",
+      "rotation_enabled": true
+    }
+  ],
+  "guardduty_enabled": false
+}
