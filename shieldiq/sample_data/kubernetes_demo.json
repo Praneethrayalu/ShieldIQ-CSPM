@@ -1,0 +1,132 @@
+{
+  "cluster": {
+    "name": "acme-prod-eks",
+    "version": "1.29"
+  },
+  "workloads": [
+    {
+      "kind": "Deployment",
+      "name": "payments-api",
+      "namespace": "payments",
+      "service_account": "payments-sa",
+      "host_network": false,
+      "host_pid": false,
+      "containers": [
+        {
+          "name": "api",
+          "image": "acme/payments-api:2.4.1",
+          "privileged": false,
+          "run_as_non_root": true,
+          "resources": {
+            "limits": {
+              "cpu": "1",
+              "memory": "1Gi"
+            }
+          },
+          "env": [
+            {
+              "name": "DB_HOST",
+              "value": "pg.payments.svc"
+            },
+            {
+              "name": "DB_PASSWORD",
+              "value_from": "secretKeyRef"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "DaemonSet",
+      "name": "log-shipper",
+      "namespace": "kube-system",
+      "service_account": "log-shipper",
+      "host_network": true,
+      "host_pid": true,
+      "containers": [
+        {
+          "name": "shipper",
+          "image": "fluent/fluent-bit:latest",
+          "privileged": true,
+          "run_as_non_root": false,
+          "resources": {},
+          "env": []
+        }
+      ]
+    },
+    {
+      "kind": "Deployment",
+      "name": "admin-dashboard",
+      "namespace": "ops",
+      "service_account": "ops-admin",
+      "host_network": false,
+      "host_pid": false,
+      "containers": [
+        {
+          "name": "dashboard",
+          "image": "acme/admin-dashboard",
+          "privileged": false,
+          "run_as_non_root": false,
+          "resources": {},
+          "env": [
+            {
+              "name": "ADMIN_TOKEN",
+              "value": "s3cr3t-admin-token-2026"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "services": [
+    {
+      "name": "payments-api",
+      "namespace": "payments",
+      "type": "ClusterIP",
+      "ports": [
+        8080
+      ],
+      "selector": "payments-api"
+    },
+    {
+      "name": "admin-dashboard",
+      "namespace": "ops",
+      "type": "LoadBalancer",
+      "ports": [
+        8443
+      ],
+      "selector": "admin-dashboard"
+    }
+  ],
+  "role_bindings": [
+    {
+      "name": "ops-admin-binding",
+      "role": "cluster-admin",
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "ops-admin",
+          "namespace": "ops"
+        }
+      ]
+    },
+    {
+      "name": "payments-read",
+      "role": "view",
+      "subjects": [
+        {
+          "kind": "ServiceAccount",
+          "name": "payments-sa",
+          "namespace": "payments"
+        }
+      ]
+    }
+  ],
+  "network_policies": [
+    "payments"
+  ],
+  "secrets_store": [
+    "payments/db-credentials",
+    "ops/admin-credentials"
+  ]
+}

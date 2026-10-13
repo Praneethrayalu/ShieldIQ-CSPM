@@ -1,0 +1,151 @@
+{
+  "project_id": "acme-analytics-prod",
+  "buckets": [
+    {
+      "name": "acme-ml-datasets",
+      "iam_members": [
+        "allUsers",
+        "group:data-team@acme.dev"
+      ],
+      "uniform_access": false,
+      "tags": {
+        "data": "sensitive"
+      }
+    },
+    {
+      "name": "acme-gcp-backups",
+      "iam_members": [
+        "serviceAccount:backup@acme-analytics-prod.iam.gserviceaccount.com"
+      ],
+      "uniform_access": true,
+      "tags": {
+        "data": "sensitive"
+      }
+    }
+  ],
+  "firewall_rules": [
+    {
+      "name": "default-allow-ssh",
+      "direction": "INGRESS",
+      "source_ranges": [
+        "0.0.0.0/0"
+      ],
+      "allowed": [
+        {
+          "protocol": "tcp",
+          "ports": [
+            "22"
+          ]
+        }
+      ],
+      "target_tags": [
+        "jump"
+      ]
+    },
+    {
+      "name": "allow-https",
+      "direction": "INGRESS",
+      "source_ranges": [
+        "0.0.0.0/0"
+      ],
+      "allowed": [
+        {
+          "protocol": "tcp",
+          "ports": [
+            "443"
+          ]
+        }
+      ],
+      "target_tags": [
+        "web"
+      ]
+    },
+    {
+      "name": "allow-internal",
+      "direction": "INGRESS",
+      "source_ranges": [
+        "10.128.0.0/9"
+      ],
+      "allowed": [
+        {
+          "protocol": "tcp",
+          "ports": [
+            "0-65535"
+          ]
+        }
+      ],
+      "target_tags": []
+    }
+  ],
+  "service_accounts": [
+    {
+      "email": "etl-runner@acme-analytics-prod.iam.gserviceaccount.com",
+      "keys": [
+        {
+          "id": "k1",
+          "age_days": 160
+        }
+      ],
+      "roles": [
+        "roles/editor"
+      ]
+    },
+    {
+      "email": "backup@acme-analytics-prod.iam.gserviceaccount.com",
+      "keys": [],
+      "roles": [
+        "roles/storage.objectAdmin"
+      ]
+    },
+    {
+      "email": "123456789-compute@developer.gserviceaccount.com",
+      "keys": [],
+      "roles": [
+        "roles/editor"
+      ]
+    }
+  ],
+  "sql_instances": [
+    {
+      "name": "analytics-pg",
+      "public_ip": true,
+      "authorized_networks": [
+        "0.0.0.0/0"
+      ],
+      "require_ssl": false,
+      "tags": {
+        "data": "sensitive"
+      }
+    },
+    {
+      "name": "reporting-mysql",
+      "public_ip": false,
+      "authorized_networks": [],
+      "require_ssl": true,
+      "tags": {}
+    }
+  ],
+  "compute_instances": [
+    {
+      "name": "jump-vm",
+      "network_tags": [
+        "jump"
+      ],
+      "external_ip": "34.93.1.10",
+      "service_account": "123456789-compute@developer.gserviceaccount.com",
+      "scopes": [
+        "cloud-platform"
+      ]
+    },
+    {
+      "name": "etl-worker",
+      "network_tags": [],
+      "external_ip": null,
+      "service_account": "etl-runner@acme-analytics-prod.iam.gserviceaccount.com",
+      "scopes": [
+        "cloud-platform"
+      ]
+    }
+  ],
+  "audit_logging_enabled": false
+}

@@ -1,0 +1,107 @@
+{
+  "subscription_id": "8f2c1d7e-demo-4b1a-9e3f-acme0000azure",
+  "tenant": "acme.onmicrosoft.com",
+  "storage_accounts": [
+    {
+      "name": "acmehrdocs",
+      "allow_blob_public_access": true,
+      "https_only": true,
+      "min_tls": "TLS1_0",
+      "tags": {
+        "data": "sensitive"
+      }
+    },
+    {
+      "name": "acmediag",
+      "allow_blob_public_access": false,
+      "https_only": true,
+      "min_tls": "TLS1_2",
+      "tags": {}
+    }
+  ],
+  "nsgs": [
+    {
+      "name": "win-jump-nsg",
+      "rules": [
+        {
+          "name": "AllowRDP",
+          "direction": "Inbound",
+          "access": "Allow",
+          "source": "Internet",
+          "port": "3389"
+        }
+      ]
+    },
+    {
+      "name": "app-nsg",
+      "rules": [
+        {
+          "name": "AllowHTTPS",
+          "direction": "Inbound",
+          "access": "Allow",
+          "source": "*",
+          "port": "443"
+        }
+      ]
+    }
+  ],
+  "sql_servers": [
+    {
+      "name": "acme-crm-sql",
+      "firewall_rules": [
+        {
+          "name": "AllowAll",
+          "start": "0.0.0.0",
+          "end": "255.255.255.255"
+        }
+      ],
+      "auditing": false,
+      "tags": {
+        "data": "sensitive"
+      }
+    }
+  ],
+  "key_vaults": [
+    {
+      "name": "acme-prod-kv",
+      "soft_delete": true,
+      "purge_protection": false
+    }
+  ],
+  "vms": [
+    {
+      "name": "win-jump-01",
+      "nsg": "win-jump-nsg",
+      "public_ip": "20.204.5.6",
+      "disk_encrypted": false,
+      "managed_identity_roles": [
+        "Contributor"
+      ]
+    },
+    {
+      "name": "app-vm-01",
+      "nsg": "app-nsg",
+      "public_ip": "20.204.5.7",
+      "disk_encrypted": true,
+      "managed_identity_roles": []
+    }
+  ],
+  "users": [
+    {
+      "upn": "it-admin@acme.onmicrosoft.com",
+      "admin": true,
+      "mfa": false
+    },
+    {
+      "upn": "cloud-ops@acme.onmicrosoft.com",
+      "admin": true,
+      "mfa": true
+    },
+    {
+      "upn": "intern@acme.onmicrosoft.com",
+      "admin": false,
+      "mfa": false
+    }
+  ],
+  "defender_enabled": false
+}

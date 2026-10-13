@@ -1,0 +1,26 @@
+{
+  "workspace": {
+    "name": "acme-labs",
+    "two_factor_required": false,
+    "public_file_sharing": true,
+    "session_duration_hours": 720,
+    "external_channel_approval": false
+  },
+  "apps": [
+    {
+      "name": "MeetingNotesBot",
+      "scopes": [
+        "channels:history",
+        "files:read",
+        "chat:write"
+      ]
+    },
+    {
+      "name": "Standup",
+      "scopes": [
+        "chat:write",
+        "commands"
+      ]
+    }
+  ]
+}

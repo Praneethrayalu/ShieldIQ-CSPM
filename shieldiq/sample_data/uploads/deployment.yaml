@@ -1,0 +1,42 @@
+# Sample Kubernetes manifests for the ShieldIQ scanner (intentionally insecure)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-billing
+  namespace: billing
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      containers:
+        - name: billing
+          image: acme/billing:latest
+          securityContext:
+            privileged: true
+          env:
+            - name: STRIPE_API_KEY
+              value: "rk_test_not_a_real_key_but_long_enough"
+            - name: LOG_LEVEL
+              value: "info"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: billing-db
+  namespace: billing
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 5432
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: billing-admin
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: billing

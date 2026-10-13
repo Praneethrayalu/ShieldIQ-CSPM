@@ -1,0 +1,63 @@
+{
+  "org": {
+    "name": "acme-labs",
+    "two_factor_required": false
+  },
+  "repos": [
+    {
+      "name": "payments-api",
+      "private": true,
+      "default_branch": "main",
+      "branch_protection": {
+        "enabled": true,
+        "required_reviews": 0
+      },
+      "secret_scanning": false,
+      "dependabot": true,
+      "has_security_policy": false,
+      "secrets_found": []
+    },
+    {
+      "name": "infra-terraform",
+      "private": false,
+      "default_branch": "main",
+      "branch_protection": {
+        "enabled": false
+      },
+      "secret_scanning": false,
+      "dependabot": false,
+      "has_security_policy": false,
+      "secrets_found": [
+        {
+          "path": "envs/prod/provider.tf",
+          "line": 7,
+          "type": "AWS Access Key ID",
+          "match": "AKIA************Q7XZ"
+        }
+      ]
+    },
+    {
+      "name": "website",
+      "private": false,
+      "default_branch": "main",
+      "branch_protection": {
+        "enabled": true,
+        "required_reviews": 1
+      },
+      "secret_scanning": true,
+      "dependabot": true,
+      "has_security_policy": true,
+      "secrets_found": []
+    }
+  ],
+  "outside_collaborators": [
+    {
+      "login": "contractor-dev",
+      "permission": "admin"
+    },
+    {
+      "login": "design-agency",
+      "permission": "pull"
+    }
+  ]
+}
