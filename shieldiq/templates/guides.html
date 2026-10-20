@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf %}
+{% from "brand.html" import mark, lockup %}
+{% from "_logos.html" import logo %}
+{% block title %}Setup guides{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}?v={{ APP_VERSION }}">{% endblock %}
+{% block body_class %}lp x gd{% endblock %}
+{% macro mock(where, rows) -%}
+{# An annotated, simplified picture of the screen you will be on: the highlighted row is the one to act on. #}
+<div class="mock" aria-hidden="true">
+  <div class="mock-bar"><i></i><i></i><i></i><span class="mock-where">{{ where }}</span></div>
+  {% for label, value, hot in rows %}
+  <div class="mock-row {{ 'hot' if hot }}"><span class="mock-k">{{ label }}</span><span class="mock-v mono">{{ value }}</span>{% if hot %}<span class="mock-cue">Click</span>{% endif %}</div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+{% macro step(n, s, where) -%}
+{% set title, text, cmds, rows = s %}{% if text.startswith('ShieldIQ') %}{% set where = 'ShieldIQ' %}{% endif %}
+<li class="gs" data-gs>
+  <div class="gs-num"><span>{{ n }}</span></div>
+  <div class="gs-body">
+    <h4>{{ title }}</h4>
+    <p>{{ text }}</p>
+    {% for c in cmds %}<pre data-copy class="gs-cmd"><code>{{ c }}</code></pre>{% endfor %}
+  </div>
+  {% if rows %}<div class="gs-art">{{ mock(where, rows) }}</div>{% endif %}
+</li>
+{%- endmacro %}
+{% block body %}
+{% set PLOGO = {'aws': 'AWS', 'gcp': 'Google Cloud', 'azure': 'Azure', 'kubernetes': 'Kubernetes', 'github': 'GitHub', 'slack': 'Slack'} %}
+<a class="skip" href="#main">Skip to content</a>
+<header class="x-nav" data-nav>
+  <div class="x-frame x-nav-in">
+    {{ lockup('', url_for('views.landing')) }}
+    <nav class="x-links" aria-label="Sections">
+      <a href="{{ url_for('views.landing') }}#how"><b>[01]</b> How it works</a><a href="#providers"><b>[02]</b> Platforms</a><a href="#after"><b>[03]</b> After you connect</a>
+    </nav>
+    <div class="x-nav-r">
+      {% if current_user.is_authenticated %}<a class="x-pill" href="{{ url_for('views.integrations') }}">Integrations <i aria-hidden="true">→</i></a>
+      {% else %}<a class="x-mono-link" href="{{ url_for('auth.login') }}">Sign in</a>{% if demo %}<a class="x-pill" href="{{ url_for('auth.login', demo=1) }}">Try demo <i aria-hidden="true">→</i></a>{% endif %}{% endif %}
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<section class="x-sec gd-x-hero">
+  <div class="x-frame">
+    <div class="x-meta" data-a="0"><span>[SIQ—03]</span><span>Setup guides</span></div>
+    <h1 class="x-h1 gd-h" data-split><span class="ln">Connect.</span> <span class="ln">Scan. <em>Fix.</em></span></h1>
+    <p class="x-lede" data-a="2">Pick your platform. Each guide shows exactly what to click there, what to paste into ShieldIQ, and what to do with the results. Every credential is read-only.</p>
+  </div>
+</section>
+
+<section class="gd-main" id="providers" aria-label="Guides by provider">
+  <div class="x-frame gd-frame">
+    <div class="gd-tabs-wrap" data-a="3">
+    <div class="gd-tabs" role="tablist" aria-label="Choose a platform" data-gd-tabs>
+      {% for k, gd in guides.items() %}
+      <button class="gd-tab" role="tab" id="tab-{{ k }}" aria-controls="panel-{{ k }}" aria-selected="{{ 'true' if loop.first else 'false' }}" data-gd-tab="{{ k }}">
+        <span class="gd-tab-logo">{{ logo(PLOGO[k]) }}</span><span class="gd-tab-a">{{ providers[k].label }}</span><span class="gd-tab-b">{{ gd.mode_label }}</span>
+      </button>
+      {% endfor %}
+      <span class="gd-tab-ind" aria-hidden="true" data-gd-ind></span>
+    </div>
+    </div>
+
+    {% for k, gd in guides.items() %}
+    {% set P = providers[k] %}
+    <article class="gd-panel" role="tabpanel" id="panel-{{ k }}" aria-labelledby="tab-{{ k }}" data-gd-panel="{{ k }}">
+      <header class="gd-ph">
+        <div class="gd-ph-l">
+          <span class="gd-ph-logo">{{ logo(PLOGO[k]) }}</span>
+          <div>
+            <span class="gd-badge {{ 'live' if gd.mode == 'live' }}">{{ gd.mode_label }}</span>
+            <h2>{{ P.label }}</h2>
+            <p class="gd-sum">{{ gd.summary }}</p>
+          </div>
+        </div>
+        <dl class="gd-need"><dt>You need</dt><dd>{{ gd.need }}</dd></dl>
+      </header>
+      <ol class="gsteps" data-gsteps>
+        <li class="gs-sec"><span>In {{ P.short if P.short != 'K8s' else 'your cluster' }}</span></li>
+        {% for s in gd.platform %}{{ step(loop.index, s, P.short ~ (' console' if k in ('aws', 'gcp', 'azure') else '')) }}{% endfor %}
+        <li class="gs-sec"><span>In ShieldIQ</span></li>
+        {% set off = gd.platform|length %}
+        {% for s in gd.shieldiq %}{{ step(off + loop.index, s, 'ShieldIQ') }}{% endfor %}
+        <span class="gs-line" aria-hidden="true"><i data-gs-fill></i></span>
+      </ol>
+      {% if gd.notes %}<aside class="gd-notes"><b>{{ icon('alert', 'sm') }} Good to know</b><ul>{% for nt in gd.notes %}<li>{{ nt }}</li>{% endfor %}</ul></aside>{% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="x-sec gd-after" id="after" aria-labelledby="after-h">
+  <div class="x-frame">
+    <div class="x-sec-meta"><span>[02]</span><span>After you connect</span></div>
+    <h2 class="x-h2" id="after-h">Read it. Fix it. <em>Prove it.</em></h2>
+    <p class="x-p">What to do once your first scan has finished, screen by screen.</p>
+    <ol class="after-list">
+      {% for title, text, img in after %}
+      <li class="af" data-af>
+        <div class="af-copy"><span class="af-n">Step {{ loop.index }}</span><h3>{{ title }}</h3><p>{{ text }}</p></div>
+        <figure class="af-shot"><img src="{{ url_for('static', filename='img/guide/' ~ img ~ '.webp') }}" width="806" height="600" loading="lazy" decoding="async" alt="ShieldIQ screen: {{ title|lower }}"></figure>
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+</section>
+
+
+<section class="x-sec x-faq-sec" id="faq">
+  <div class="x-frame x-faq-in">
+    <div class="x-faq-l">
+      <div class="x-sec-meta"><span>FAQ</span></div>
+      <h2 class="x-h2">Questions,<br><em>answered</em></h2>
+    </div>
+    <div class="x-faq">
+      <details class="x-qa"><summary><b>01</b>What does ShieldIQ actually do?<i aria-hidden="true"></i></summary><div class="x-qa-a"><p>It reads the settings of your cloud accounts and tools, looks for risky ones (like a database anyone on the internet can reach), links them into the paths an attacker could follow, and gives you the fix for each.</p></div></details>
+      <details class="x-qa"><summary><b>02</b>Will it change anything in my cloud?<i aria-hidden="true"></i></summary><div class="x-qa-a"><p>No. Live connections are read-only. One-click auto-fix changes ShieldIQ's stored copy of a demo or imported configuration and re-scans to prove the fix. For a live account you get the exact command or Terraform to apply yourself, or a GitHub pull request.</p></div></details>
+      <details class="x-qa"><summary><b>03</b>Which platforms can I connect?<i aria-hidden="true"></i></summary><div class="x-qa-a"><p>AWS and GitHub connect live with read-only access. Google Cloud, Azure and Slack are scanned from a JSON snapshot you export, and Kubernetes from YAML. The guides above show each one click by click.</p></div></details>
+      <details class="x-qa"><summary><b>04</b>Is this a real company?<i aria-hidden="true"></i></summary><div class="x-qa-a"><p>No. ShieldIQ is a student portfolio project built to learn and demonstrate cloud security engineering. No company uses it, and the demo workspace “Acme Labs” is fictional.</p></div></details>
+      <details class="x-qa"><summary><b>05</b>Do I need to pay for anything?<i aria-hidden="true"></i></summary><div class="x-qa-a"><p>No. It runs on your own machine with built-in sample data, so you can try every feature without accounts or API keys.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section class="x-cta-sec">
+  <div class="x-hazard thin" aria-hidden="true"></div>
+  <div class="x-frame x-cta-in">
+    <div class="x-sec-meta"><span>[03]</span><span>Try it</span></div>
+    <h2 class="x-h2 x-cta-h">Ready to <em>try it?</em></h2>
+    <p class="x-p">Use the demo cloud first, then connect your own platform with the guide above.</p>
+    <div class="x-cta">
+      {% if current_user.is_authenticated %}
+      <a class="x-btn" href="{{ url_for('views.integrations') }}"><span>Open Integrations</span><i aria-hidden="true">→</i></a>
+      {% elif demo %}
+      <form method="post" action="{{ url_for('auth.login') }}" class="inline-form">{{ csrf() }}<input type="hidden" name="email" value="{{ demo.email }}"><input type="hidden" name="password" value="{{ demo.password }}"><button class="x-btn" type="submit"><span>Try it on the demo cloud</span><i aria-hidden="true">→</i></button></form>
+      {% endif %}
+      {% if not current_user.is_authenticated %}<a class="x-btn ghost" href="{{ url_for('auth.register') }}"><span>Create a workspace</span><i aria-hidden="true">→</i></a>{% endif %}
+    </div>
+  </div>
+</section>
+</main>
+{% include "_lp_foot.html" %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/landing.js') }}?v={{ APP_VERSION }}"></script><script src="{{ url_for('static', filename='js/guides.js') }}?v={{ APP_VERSION }}"></script>{% endblock %}

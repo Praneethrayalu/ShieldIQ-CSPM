@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, prov, sev %}
+{% from "_iso.html" import estate %}
+{% block title %}Attack paths{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">Analysis</div><h1>Attack paths</h1><p>Chains of open findings that take an attacker from the internet to sensitive data. Each chain is drawn left to right; fix the node marked <span class="fix-tag">Fix here</span> and the chain breaks.</p></div>
+  <div class="head-figs"><div><span class="eyebrow">Open attack paths</span><b class="figure" data-track="paths" data-value="{{ g.paths|length }}">{{ g.paths|length }}</b><span class="track-delta" data-track-delta hidden></span></div></div>
+</div>
+{% if not g.paths %}
+<div class="card empty">{{ icon('check-circle') }}<h2>No attack paths</h2><p>No chain of open findings connects the internet to a sensitive asset right now.</p></div>
+{% else %}
+{% set ep = (g.paths|selectattr('choke_point')|list or g.paths)|first %}
+<section class="card estate-card" style="margin-bottom:24px" data-reveal aria-labelledby="estate-h">
+  <div class="card-head"><h3 id="estate-h">Riskiest path, drawn</h3><span class="mono tiny faint">internet → {{ ep.nodes[-1].label }}</span></div>
+  <div class="estate-stage">{{ estate(ep, 'hot-on path-on', 'paths-estate') }}</div>
+  <div class="estate-foot">{% if ep.choke_point %}<span class="hot">Fix here: <b class="hot">{{ ep.choke_point.label }}</b></span>{% endif %}<span>Orange = open issues on that resource</span></div>
+</section>
+<section class="card pad-0" style="margin-bottom:var(--s-8)" data-reveal>
+  <div class="card-head" style="padding:var(--s-5) var(--s-5) 0"><h3>Choke points: fix these first</h3><span class="mono tiny faint">{{ g.paths|length }} paths analysed · ranked by paths broken</span></div>
+  <div class="table-wrap"><table class="table choke-table">
+    <thead><tr><th style="width:44px">Rank</th><th>Node</th><th>The fix</th><th class="num" style="width:120px">Paths broken</th></tr></thead>
+    <tbody>
+    {% for c in g.choke_points %}
+    <tr data-stagger>
+      <td class="mono faint">{{ '%02d'|format(loop.index) }}</td>
+      <td><div class="mono" style="font-weight:500">{{ c.node.label }}</div><div class="tiny faint mono">{{ c.node.type }}</div></td>
+      <td>{% if c.fix %}<a class="link" href="{{ url_for('views.finding_detail', fid=c.fix.id) }}"><span class="mono">#{{ c.fix.id }}</span> {{ c.fix.title }}</a>{% endif %}{% if c.fix_rule %}<div class="tiny faint" style="margin-top:2px">{{ c.fix_rule }}</div>{% endif %}</td>
+      <td class="num"><span class="figure" style="font-size:var(--t-20)">{{ c.paths }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<div class="row between wrap" style="margin-bottom:var(--s-4);gap:var(--s-3)">
+  <h2 style="font-size:var(--t-16)">All paths <span class="mono faint" style="font-weight:400">· riskiest first</span></h2>
+  <div class="row wrap" style="gap:6px" role="group" aria-label="Filter by severity">
+    <button class="chip active" data-path-filter="">All <span class="mono">{{ g.paths|length }}</span></button>
+    {% for s in ['critical', 'high', 'medium', 'low'] %}{% set n = g.paths|selectattr('severity', 'equalto', s)|list|length %}{% if n %}<button class="chip" data-path-filter="{{ s }}"><i class="sq {{ s }}"></i>{{ s|title }} <span class="mono">{{ n }}</span></button>{% endif %}{% endfor %}
+  </div>
+</div>
+{% for p in g.paths %}
+<section class="path" data-path-sev="{{ p.severity }}">
+  <div class="path-head">
+    <div class="row top" style="gap:var(--s-3)">{{ prov(p.provider) }}<div><div class="path-id">{{ p.id }} · {{ p.integration }} · {{ p.hops }} hop{{ 's' if p.hops > 1 }}</div><div class="path-title">{{ p.title }}</div></div></div>
+    <div class="row">{{ sev(p.severity) }}<span class="risk">{{ p.risk_score }}</span><span class="tiny faint mono">/100</span></div>
+  </div>
+  {% include "_chain.html" %}
+  {% if p.choke_point %}<div class="path-foot"><span class="fix-arrow">Fix here →</span> <b class="mono">{{ p.choke_point.label }}</b> · <a class="link" href="{{ url_for('views.finding_detail', fid=p.choke_point.finding.id) }}"><span class="mono">#{{ p.choke_point.finding.id }}</span> {{ p.choke_point.finding.title }}</a></div>{% endif %}
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, sev, prov, csrf %}
+{% block title %}IaC & secret scanner{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">Security</div><h1>IaC &amp; secret scanner</h1><p>Shift left: catch misconfigurations in Terraform and Kubernetes manifests, and credentials in code, before they ship.</p></div>
+</div>
+{% if result %}
+<div class="card" style="margin-bottom:18px">
+  <div class="card-head"><h3>{{ icon('check-circle') }} Results: {{ result.integ.name }}</h3>
+    <div class="row"><span class="muted small">{{ result.run.checks_run }} checks · {{ result.run.checks_failed }} failed</span><a class="btn sm" href="{{ url_for('views.findings', integration=result.integ.id) }}">Open in findings</a></div></div>
+  {% for f in result.findings %}
+  <a class="list-item" href="{{ url_for('views.finding_detail', fid=f.id) }}">{{ sev(f.severity) }}<div class="grow"><b>{{ f.title }}</b><div class="res">{{ f.resource_id }} · {{ f.detail }}</div></div>{{ icon('chevron', 'sm') }}</a>
+  {% else %}<div class="empty">{{ icon('check-circle') }}<div>Clean: no issues found.</div></div>{% endfor %}
+</div>
+{% endif %}
+<div class="grid g-2">
+  <div class="card">
+    <div class="card-head"><h3>{{ icon('layers') }} Infrastructure as Code</h3><span class="tag">.tf · .yaml · .yml</span></div>
+    <p class="muted small" style="margin-top:0">Terraform AWS resources are mapped onto the AWS rules (S3, security groups, EC2, RDS, IAM, KMS, CloudTrail). Kubernetes manifests (Deployments, DaemonSets, Pods, Services, RBAC, NetworkPolicies) run against the Kubernetes rules.</p>
+    <form method="post" enctype="multipart/form-data" data-loading="Scanning…">
+      {{ csrf() }}<input type="hidden" name="kind" value="iac">
+      <label class="dropzone" data-dropzone>{{ icon('upload') }}<div data-dz-label>Drop a .tf or .yaml file, or click to choose</div><input type="file" name="file" accept=".tf,.yaml,.yml,.json"></label>
+      <div class="field" style="margin-top:12px"><label>…or paste</label><textarea name="content" placeholder="resource &quot;aws_s3_bucket&quot; &quot;data&quot; { ... }"></textarea></div>
+      <div class="row between wrap"><div class="small muted">Samples: <a class="link" href="{{ url_for('views.scanner_sample', name='main.tf') }}">main.tf</a> · <a class="link" href="{{ url_for('views.scanner_sample', name='deployment.yaml') }}">deployment.yaml</a></div>
+      {% if current_user.can('scan') %}<button class="btn primary" type="submit">{{ icon('scan', 'sm') }} Scan IaC</button>{% endif %}</div>
+    </form>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>{{ icon('key') }} Secret detection</h3><span class="tag">14 detectors</span></div>
+    <p class="muted small" style="margin-top:0">AWS / GCP / Azure keys, private keys, GitHub, Slack, Stripe and OpenAI tokens, JWTs, database URLs with passwords and high-entropy hard-coded passwords. Values are masked in results.</p>
+    <form method="post" enctype="multipart/form-data" data-loading="Scanning…">
+      {{ csrf() }}<input type="hidden" name="kind" value="secrets">
+      <label class="dropzone" data-dropzone>{{ icon('upload') }}<div data-dz-label>Drop a code/config file, or click to choose</div><input type="file" name="file"></label>
+      <div class="field" style="margin-top:12px"><label>…or paste</label><textarea name="content" placeholder="Paste code or config here"></textarea></div>
+      <div class="row between wrap"><div class="small muted">Sample: <a class="link" href="{{ url_for('views.scanner_sample', name='settings.py') }}">settings.py</a> (fake secrets)</div>
+      {% if current_user.can('scan') %}<button class="btn primary" type="submit">{{ icon('scan', 'sm') }} Scan for secrets</button>{% endif %}</div>
+    </form>
+  </div>
+</div>
+<div class="card" style="margin-top:18px">
+  <div class="card-head"><h3>{{ icon('clock') }} Previous scans</h3><span class="muted small">Each upload is kept as a source so you can re-scan or auto-fix it.</span></div>
+  {% for u in uploads %}
+  <div class="list-item">{{ prov(u.provider) }}<div class="grow"><b>{{ u.name }}</b><div class="tiny muted">{{ u.last_scan_at|timeago }}</div></div>
+    <a class="btn sm" href="{{ url_for('views.findings', integration=u.id) }}">Findings</a></div>
+  {% else %}<div class="empty small">No uploads yet.</div>{% endfor %}
+</div>
+{% endblock %}

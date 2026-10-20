@@ -1,0 +1,15 @@
+{# Shared public-page footer (landing, guides): charcoal, with the giant wide wordmark. #}
+{% from "brand.html" import lockup %}
+<footer class="x-foot">
+  <div class="x-frame">
+    <div class="x-foot-top">
+      <div class="x-foot-brand">{{ lockup('', url_for('views.landing')) }}<p>Find the security holes in your cloud before attackers do. A student portfolio project; not a commercial product.</p></div>
+      <nav class="x-foot-cols" aria-label="Footer">
+        <div><b>[Product]</b><a href="{{ url_for('views.landing') }}#how">How it works</a><a href="{{ url_for('views.landing') }}#features">Features</a><a href="{{ url_for('views.guides') }}#faq">FAQ</a></div>
+        <div><b>[Get started]</b><a href="{{ url_for('views.guides') }}">Setup guides</a><a href="{{ url_for('auth.login') }}">Sign in</a><a href="{{ url_for('auth.register') }}">Register</a></div>
+      </nav>
+    </div>
+    <div class="x-foot-word" aria-hidden="true">SHIELDIQ</div>
+    <div class="x-foot-bot"><span>© 2026 ShieldIQ · portfolio project</span><span>Demo data is fictional · runs locally</span><span>Visual direction inspired by a Dribbble reference</span></div>
+  </div>
+</footer>

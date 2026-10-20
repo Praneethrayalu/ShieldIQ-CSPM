@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Workspace</div><h1>Settings</h1><p>Profile, security, API access and organization configuration.</p></div></div>
+{% if new_token %}
+<div class="card" style="margin-bottom:18px"><h3 class="row">{{ icon('key') }} Your new API token</h3><p class="muted small">Copy it now. Only a hash is stored, so it cannot be shown again.</p><pre data-copy><code>{{ new_token }}</code></pre></div>
+{% endif %}
+<div class="grid g-2">
+  <div class="card">
+    <h3 class="row" style="margin-bottom:14px">{{ icon('user') }} Profile</h3>
+    <form method="post">{{ csrf() }}<input type="hidden" name="action" value="profile">
+      <div class="field"><label>Full name</label><input type="text" name="full_name" value="{{ current_user.full_name }}" required></div>
+      <div class="field"><label>Email</label><input type="email" value="{{ current_user.email }}" disabled></div>
+      <div class="field"><label>Default theme</label><div class="seg">
+        <label><input type="radio" name="theme" value="dark" {{ 'checked' if current_user.theme == 'dark' }}><span>Dark</span></label>
+        <label><input type="radio" name="theme" value="light" {{ 'checked' if current_user.theme == 'light' }}><span>Light</span></label></div></div>
+      <button class="btn" type="submit">Save profile</button></form>
+  </div>
+  <div class="card">
+    <h3 class="row" style="margin-bottom:14px">{{ icon('lock') }} Change password</h3>
+    <form method="post">{{ csrf() }}<input type="hidden" name="action" value="password">
+      <div class="field"><label>Current password</label><input type="password" name="current" autocomplete="current-password" required></div>
+      <div class="grid g-2" style="gap:12px"><div class="field"><label>New password</label><input type="password" name="new" autocomplete="new-password" required></div>
+      <div class="field"><label>Confirm</label><input type="password" name="confirm" autocomplete="new-password" required></div></div>
+      <div class="hint" style="margin:-6px 0 12px">{{ rules }}</div>
+      <button class="btn" type="submit">Change password</button></form>
+  </div>
+  <div class="card">
+    <h3 class="row" style="margin-bottom:14px">{{ icon('api') }} API tokens</h3>
+    {% for t in tokens %}
+    <div class="list-item"><span class="mono small">{{ t.prefix }}…</span><div class="grow"><b class="small">{{ t.name }}</b><div class="tiny faint">created {{ t.created_at|timeago }} · last used {{ t.last_used_at|timeago }}</div></div>
+      <form method="post" data-confirm="Revoke this token?">{{ csrf() }}<input type="hidden" name="action" value="revoke"><input type="hidden" name="token_id" value="{{ t.id }}"><button class="btn sm danger" type="submit">Revoke</button></form></div>
+    {% else %}<p class="muted small">No tokens yet.</p>{% endfor %}
+    <form method="post" class="row" style="margin-top:12px">{{ csrf() }}<input type="hidden" name="action" value="token"><input type="text" name="token_name" placeholder="Token name, e.g. CI pipeline" maxlength="80"><button class="btn" type="submit">{{ icon('plus', 'sm') }} Create</button></form>
+    <div class="hint">Use as <code>Authorization: Bearer &lt;token&gt;</code>. See <a class="link" href="{{ url_for('views.api_docs') }}">API docs</a>.</div>
+  </div>
+  <div class="card">
+    <h3 class="row" style="margin-bottom:14px">{{ icon('sparkles') }} Optional services</h3>
+    <div class="list-item"><div class="grow"><b class="small">Copilot LLM</b><div class="tiny muted">Set SHIELDIQ_LLM_API_KEY (any OpenAI-compatible API) in .env</div></div><span class="badge {{ 'st-connected' if llm else 'st-accepted' }}">{{ 'enabled' if llm else 'offline engine' }}</span></div>
+    <div class="list-item"><div class="grow"><b class="small">Slack alerts</b><div class="tiny muted">Incoming webhook URL (below)</div></div><span class="badge {{ 'st-connected' if has_webhook else 'st-accepted' }}">{{ 'configured' if has_webhook else 'off' }}</span></div>
+    <div class="list-item"><div class="grow"><b class="small">GitHub fix PRs</b><div class="tiny muted">Repository + token (below)</div></div><span class="badge {{ 'st-connected' if org.github_repo and has_gh_token else 'st-accepted' }}">{{ 'configured' if org.github_repo and has_gh_token else 'off' }}</span></div>
+  </div>
+  {% if current_user.can('admin') %}
+  <div class="card span-2">
+    <h3 class="row" style="margin-bottom:14px">{{ icon('settings') }} Organization</h3>
+    <form method="post">{{ csrf() }}<input type="hidden" name="action" value="org">
+      <div class="grid g-3" style="gap:14px">
+        <div class="field"><label>Organization name</label><input type="text" name="org_name" value="{{ org.name }}"></div>
+        <div class="field"><label>Alert on new findings at or above</label><select name="alert_min_severity">{% for s in SEVERITIES %}<option value="{{ s }}" {{ 'selected' if org.alert_min_severity == s }}>{{ s|title }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Alert when score drops by (points)</label><input type="number" name="alert_score_drop" min="1" max="50" value="{{ org.alert_score_drop }}"></div>
+        <div class="field"><label>Alert email</label><input type="email" name="alert_email" value="{{ org.alert_email or '' }}" placeholder="security@company.com"><div class="hint">Needs SMTP settings in .env</div></div>
+        <div class="field"><label>Slack webhook {% if has_webhook %}<span class="tag">saved, encrypted</span>{% endif %}</label><input type="password" name="slack_webhook" placeholder="https://hooks.slack.com/services/…" autocomplete="off">
+          {% if has_webhook %}<label class="checkbox" style="margin-top:6px"><input type="checkbox" name="clear_webhook"> Remove</label>{% endif %}</div>
+        <div class="field"><label>GitHub repo for fix PRs</label><input type="text" name="github_repo" value="{{ org.github_repo or '' }}" placeholder="owner/infra-repo"></div>
+        <div class="field"><label>GitHub token {% if has_gh_token %}<span class="tag">saved, encrypted</span>{% endif %}</label><input type="password" name="github_token" autocomplete="off" placeholder="Fine-grained token: contents + pull requests (write)">
+          {% if has_gh_token %}<label class="checkbox" style="margin-top:6px"><input type="checkbox" name="clear_github_token"> Remove</label>{% endif %}</div>
+      </div>
+      <button class="btn primary" type="submit">Save organization settings</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

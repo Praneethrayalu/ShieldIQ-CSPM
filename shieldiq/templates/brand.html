@@ -1,0 +1,18 @@
+{# ShieldIQ identity (round 5, "industrial blueprint"). The mark is one isometric block of your cloud estate:
+   charcoal sides, its top face in signal orange = "this block has a hole". It sits on a black tile so it reads at 16 px.
+   The wordmark is set in Archivo at its widest width, uppercase. DESIGN.md §Identity. #}
+{% macro mark(cls='', title=None) -%}
+<svg class="mark {{ cls }}" viewBox="0 0 48 48" {% if title %}role="img" aria-label="{{ title }}"{% else %}aria-hidden="true"{% endif %}>
+  <path class="m-l" d="M10 17.5 24 25.5v15L10 32.5z" fill="#f2f2ef"/>
+  <path class="m-r" d="M38 17.5 24 25.5v15l14-8z" fill="#b9b9b4"/>
+  <path class="m-t" d="M24 9.5 38 17.5 24 25.5 10 17.5z" fill="#ff5a1f"/>
+</svg>
+{%- endmacro %}
+{% macro wordmark(cls='') -%}
+<span class="wordmark {{ cls }}"><span class="wm-a">Shield</span><span class="wm-b">IQ</span></span>
+{%- endmacro %}
+{% macro lockup(cls='', href=None) -%}
+{% if href %}<a class="lockup {{ cls }}" href="{{ href }}" aria-label="ShieldIQ home">{% else %}<span class="lockup {{ cls }}">{% endif %}
+<span class="lockup-tile">{{ mark() }}</span>{{ wordmark() }}
+{% if href %}</a>{% else %}</span>{% endif %}
+{%- endmacro %}

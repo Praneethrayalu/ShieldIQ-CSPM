@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Analysis</div><h1>Reports</h1><p>Executive PDF reports with posture score, compliance, attack paths and remediation. Exports for spreadsheets and pipelines.</p></div></div>
+<div class="grid g-main">
+  <div class="card pad-0">
+    <div class="card-head" style="padding:18px 20px 0"><h3>{{ icon('file') }} Generated reports</h3></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Report</th><th>Score</th><th>Open findings</th><th>Created</th><th></th></tr></thead>
+      <tbody>
+      {% for r in items %}
+      <tr><td class="title-cell">{{ r.title }}<div class="tiny faint">{{ r.created_by }}</div></td><td><b>{{ r.posture_score if r.posture_score is not none else '–' }}</b></td><td>{{ r.finding_count }}</td><td class="small muted">{{ r.created_at|timeago }}</td>
+        <td><div class="row" style="justify-content:flex-end">
+          <a class="btn sm" href="{{ url_for('views.report_download', rid=r.id, inline=1) }}" target="_blank" rel="noopener">{{ icon('eye', 'sm') }} View</a>
+          <a class="btn sm" href="{{ url_for('views.report_download', rid=r.id) }}">{{ icon('download', 'sm') }}</a>
+          {% if current_user.can('report') %}<form method="post" action="{{ url_for('views.report_delete', rid=r.id) }}" data-confirm="Delete this report?">{{ csrf() }}<button class="btn sm ghost" type="submit">{{ icon('trash', 'sm') }}</button></form>{% endif %}
+        </div></td></tr>
+      {% else %}<tr><td colspan="5"><div class="empty">{{ icon('file') }}<div>No reports yet. Generate one on the right.</div></div></td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  <div class="stack lg">
+    {% if current_user.can('report') %}
+    <div class="card">
+      <h3 class="row" style="margin-bottom:12px">{{ icon('plus') }} New PDF report</h3>
+      <form method="post" action="{{ url_for('views.report_generate') }}" data-loading="Building PDF…">
+        {{ csrf() }}
+        <div class="field"><label>Focus framework (adds control-by-control detail)</label>
+          <select name="framework"><option value="">Executive summary (all frameworks)</option>{% for k, v in FRAMEWORKS.items() %}<option value="{{ k }}">{{ v.name }} {{ v.version }}</option>{% endfor %}</select></div>
+        <button class="btn primary block" type="submit">{{ icon('file', 'sm') }} Generate PDF</button>
+      </form>
+    </div>
+    {% endif %}
+    <div class="card">
+      <h3 class="row" style="margin-bottom:12px">{{ icon('download') }} Exports</h3>
+      <div class="stack">
+        <a class="btn block" href="{{ url_for('views.export_findings', fmt='csv') }}">{{ icon('list', 'sm') }} All findings (CSV)</a>
+        <a class="btn block" href="{{ url_for('views.export_findings', fmt='json') }}">{{ icon('code', 'sm') }} Findings + compliance + paths (JSON)</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, sev %}
+{% from "brand.html" import mark, wordmark, lockup %}
+{% from "_logos.html" import logo %}
+{% from "_iso.html" import estate, stack, module %}
+{% block title %}Cloud security posture, with attack paths{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}?v={{ APP_VERSION }}">{% endblock %}
+{% block body_class %}lp x{% endblock %}
+{% macro demo_button(cls='', label='Try live demo') -%}
+{% if current_user.is_authenticated %}
+<a class="x-btn {{ cls }}" href="{{ url_for('views.dashboard') }}"><span>Open your dashboard</span><i aria-hidden="true">→</i></a>
+{% elif demo %}
+<form method="post" action="{{ url_for('auth.login') }}" class="inline-form">
+  {{ csrf() }}<input type="hidden" name="email" value="{{ demo.email }}"><input type="hidden" name="password" value="{{ demo.password }}">
+  <button class="x-btn {{ cls }}" type="submit"><span>{{ label }}</span><i aria-hidden="true">→</i></button>
+</form>
+{% else %}
+<a class="x-btn {{ cls }}" href="{{ url_for('auth.register') }}"><span>Create a workspace</span><i aria-hidden="true">→</i></a>
+{% endif %}
+{%- endmacro %}
+{% macro ticks() -%}<i class="tk tl" aria-hidden="true"></i><i class="tk tr" aria-hidden="true"></i><i class="tk bl" aria-hidden="true"></i><i class="tk br" aria-hidden="true"></i>{%- endmacro %}
+{% block body %}
+{% set GMODE = {'aws': ('Live', True), 'github': ('Live', True), 'gcp': ('Snapshot', False), 'azure': ('Snapshot', False), 'kubernetes': ('YAML', False), 'slack': ('Snapshot', False)} %}
+{% set PLOGO = {'aws': 'AWS', 'gcp': 'Google Cloud', 'azure': 'Azure', 'kubernetes': 'Kubernetes', 'github': 'GitHub', 'slack': 'Slack'} %}
+{% set P = art.path %}{% set story = art.story %}
+{% set sb = art.score_before if art.score_before is defined and art.score_before is not none else 46 %}
+{% set sa = art.score_after if art.score_after is defined and art.score_after is not none else 52 %}
+{% set pf = art.path_findings if art.path_findings is defined and art.path_findings else 8 %}
+
+<a class="skip" href="#main">Skip to content</a>
+
+{# ------------------------------------------------------------------ nav #}
+<header class="x-nav" data-nav>
+  <div class="x-frame x-nav-in">
+    {{ lockup('', url_for('views.landing')) }}
+    <nav class="x-links" aria-label="Product">
+      <a href="#how">How it works</a><a href="#features">Features</a><a href="{{ url_for('views.guides') }}">Setup guides</a><a href="{{ url_for('views.guides') }}#faq">FAQ</a>
+    </nav>
+    <div class="x-nav-r">
+      {% if current_user.is_authenticated %}
+      <a class="x-pill" href="{{ url_for('views.dashboard') }}">Dashboard <i aria-hidden="true">→</i></a>
+      {% else %}
+      <a class="x-mono-link" href="{{ url_for('auth.login') }}">Sign in</a>
+      {% if demo %}<a class="x-pill" href="{{ url_for('auth.login', demo=1) }}">Try demo <i aria-hidden="true">→</i></a>{% else %}<a class="x-pill" href="{{ url_for('auth.register') }}">Get started <i aria-hidden="true">→</i></a>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<main id="main">
+{# ------------------------------------------------------------------ 1 · hero: headline, one line, one button, the module #}
+<section class="x-hero" data-hero>
+  <div class="x-frame x-hero-in">
+    <div class="x-hero-copy">
+      <h1 class="x-h1 hero-title"><span class="ln">Find the</span> <span class="ln">holes in</span> <span class="ln">your <em>cloud</em></span></h1>
+      <p class="x-lede" data-a="3">Before attackers do — and see exactly how to fix them.</p>
+      <div class="x-cta" data-a="4">{{ demo_button() }}<a class="x-textlink" href="#how">How it works <i aria-hidden="true">↓</i></a></div>
+    </div>
+    <figure class="x-obj" data-obj aria-label="ShieldIQ, pictured as a security module">
+      <div class="x-obj-img" data-obj-img>{{ module('assemble') }}</div>
+    </figure>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ 2 · the five-step story, one step at a time #}
+<section class="x-story" id="how" data-story>
+  <div class="x-story-pin">
+    <div class="x-frame x-story-in">
+      <div class="x-story-l">
+        <div class="x-sec-meta"><span>How it works</span></div>
+        <div class="x-stepbox" aria-live="polite">
+          {% for n, t, cap in [
+            (1, 'Connect', 'Give ShieldIQ read-only access to your cloud. Nothing in it is ever changed.'),
+            (2, 'Scan', 'A library of ' ~ stats.checks ~ ' checks reads your cloud\'s settings. Risky ones light up orange.'),
+            (3, 'Prioritise', 'Issues link into an <b>attack path</b>: a chain of mistakes an attacker can follow to your data.'),
+            (4, 'Fix', 'Simulate the fix for the ' ~ pf ~ ' issues on this path. The path is cut.'),
+            (5, 'Prove', 'ShieldIQ scans again to prove it worked. Score ' ~ sb ~ ' → ' ~ sa ~ '.')
+          ] %}
+          <div class="x-step{{ ' on' if loop.first }}" data-step="{{ n }}">
+            <span class="x-step-n">0{{ n }}<small>/05</small></span>
+            <strong>{{ t }}</strong>
+            <p>{{ cap|safe }}</p>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="x-segs" role="tablist" aria-label="Steps">{% for t in ['Connect', 'Scan', 'Prioritise', 'Fix', 'Prove'] %}<button type="button" class="x-seg{{ ' on' if loop.first }}" data-seg="{{ loop.index }}" aria-label="Step {{ loop.index }}: {{ t }}"><i></i></button>{% endfor %}</div>
+      </div>
+      <div class="x-story-r">
+        <div class="x-scene" data-scene>
+          <div class="x-scene-top"><span class="x-scene-step" data-scene-label>[01] CONNECT</span><span>Demo cloud</span></div>
+          <div class="x-scene-stage" data-stage>{{ estate(P, 's1', 'estate') }}</div>
+          <div class="x-readout">
+            <div><span>Issues on this path</span><b><span data-ro-issues data-from="{{ pf }}">{{ pf }}</span></b></div>
+            <div><span>Security score</span><b><span data-ro-score data-from="{{ sb }}" data-to="{{ sa }}">{{ sb }}</span><small>/100</small></b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ 3 · three key features (charcoal) #}
+<section class="x-sec x-dark" id="features">
+  <div class="x-frame x-inside">
+    <div class="x-inside-l">
+      <div class="x-sec-meta"><span>What you get</span></div>
+      <ol class="x-three" data-rs>
+        <li><b>01</b><h3>See the attack path</h3><p>A modeled route an attacker could follow from the internet to your data.</p></li>
+        <li><b>02</b><h3>Fix, then prove it</h3><p>Simulate each fix in ShieldIQ first; apply it for real with a command, Terraform or pull request.</p></li>
+        <li><b>03</b><h3>Prove it</h3><p>Re-scan, then a compliance report for {{ stats.frameworks }} frameworks.</p></li>
+      </ol>
+    </div>
+    <div class="x-stack" data-stack>{{ stack() }}</div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ 4 · one stat row #}
+<section class="x-sec x-nums">
+  <div class="x-frame">
+    <div class="x-num-grid" data-rs>
+      <div class="x-num hot"><b class="num" data-count="{{ stats.checks }}" data-stat="{{ stats.checks }}">{{ stats.checks }}</b><span>Security checks</span></div>
+      <div class="x-num"><b class="num" data-count="{{ stats.providers }}" data-stat="{{ stats.providers }}">{{ stats.providers }}</b><span>Platforms</span></div>
+      <div class="x-num"><b class="num" data-count="{{ stats.frameworks }}" data-stat="{{ stats.frameworks }}">{{ stats.frameworks }}</b><span>Compliance frameworks</span></div>
+    </div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ 5 · guides + CTA band #}
+<section class="x-cta-sec">
+  <div class="x-hazard thin" aria-hidden="true"></div>
+  <div class="x-frame x-cta-in">
+    <h2 class="x-h2 x-cta-h">Connect your cloud in <em>minutes</em></h2>
+    <p class="x-p">Step-by-step guides for each platform. AWS and GitHub connect live and read-only; the others by a snapshot you export.</p>
+    <div class="x-cta">{{ demo_button() }}<a class="x-textlink" href="{{ url_for('views.guides') }}">Setup guides <i aria-hidden="true">→</i></a></div>
+    <div class="x-works" data-rs aria-label="Works with">
+      <span class="x-works-l">Works with</span>
+      {% for k, p in providers.items() %}<a class="x-works-i" href="{{ url_for('views.guides') }}#{{ k }}" title="{{ p.label }} setup guide">{{ logo(PLOGO[k]) }}<span>{{ p.label }}</span><em class="x-works-m {{ 'live' if GMODE.get(k, ('', False))[1] }}">{{ GMODE.get(k, ('Snapshot', False))[0] }}</em></a>{% endfor %}
+    </div>
+  </div>
+</section>
+</main>
+
+{% include "_lp_foot.html" %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/landing.js') }}?v={{ APP_VERSION }}"></script>{% endblock %}

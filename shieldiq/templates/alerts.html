@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, sev %}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+{% set KIND_ICON = {'new_finding': 'alert', 'score_drop': 'activity', 'scan_failed': 'x', 'remediation': 'check-circle'} %}
+<div class="page-head">
+  <div><div class="eyebrow">Analysis</div><h1>Alerts</h1><p>Raised on new findings at or above your threshold, posture score drops, failed scans and verified fixes. Optionally delivered to Slack and email (Settings).</p></div>
+  <form method="post" action="{{ url_for('views.alerts_read') }}">{{ csrf() }}<button class="btn" type="submit">{{ icon('check', 'sm') }} Mark all read</button></form>
+</div>
+<div class="row wrap" style="gap:6px;margin-bottom:var(--s-4)">
+  <a class="chip {{ 'active' if not kind }}" href="{{ url_for('views.alerts') }}">All</a>
+  {% for k in ['new_finding', 'score_drop', 'scan_failed', 'remediation'] %}<a class="chip {{ 'active' if kind == k }}" href="{{ url_for('views.alerts', kind=k) }}">{{ k|replace('_', ' ')|title }}</a>{% endfor %}
+</div>
+<div class="card">
+{% for a in items %}
+  <div class="list-item alert-row {{ 'unread' if not a.read }}" style="align-items:flex-start">
+    <span class="alert-sev">{{ sev(a.severity) }}</span>
+    <div class="grow"><div class="row" style="gap:var(--s-2)">{% if not a.read %}<span class="unread-mark" title="Unread">new</span>{% endif %}<b>{{ a.title }}</b></div><div class="small muted" style="white-space:pre-line">{{ a.body or '' }}</div>
+      <div class="tiny faint mono" style="margin-top:4px">{{ a.kind|replace('_', ' ') }} · {{ a.created_at|timeago }}{% if a.delivered %} · delivered: {% for ch, st in a.delivered.items() %}{{ ch }} {{ st }} {% endfor %}{% endif %}</div></div>
+    {% if a.finding_id %}<a class="btn sm" href="{{ url_for('views.finding_detail', fid=a.finding_id) }}">View</a>{% endif %}
+    {% if not a.read %}<form method="post" action="{{ url_for('views.alerts_read') }}">{{ csrf() }}<input type="hidden" name="id" value="{{ a.id }}"><button class="btn sm ghost" type="submit" title="Mark read">{{ icon('check', 'sm') }}</button></form>{% endif %}
+  </div>
+{% else %}<div class="empty">{{ icon('bell') }}<div>No alerts.</div></div>{% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon %}
+{% block title %}REST API{% endblock %}
+{% block content %}
+{% set base = request.url_root.rstrip('/') + '/api/v1' %}
+<div class="page-head"><div><div class="eyebrow">Workspace</div><h1>REST API</h1><p>Automate ShieldIQ from CI/CD. Create a token in <a class="link" href="{{ url_for('views.settings') }}">Settings</a>; requests are scoped to your organization and role.</p></div></div>
+<div class="card" style="margin-bottom:18px"><h3 style="margin-bottom:10px">Quick start</h3>
+<pre data-copy><code>export SHIELDIQ_TOKEN=siq_...
+curl -H "Authorization: Bearer $SHIELDIQ_TOKEN" {{ base }}/summary
+
+# Fail a CI build if a Terraform plan file has critical issues
+curl -s -H "Authorization: Bearer $SHIELDIQ_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"filename\": \"main.tf\", \"content\": $(python -c 'import json;print(json.dumps(open(\"main.tf\").read()))')}" \
+  {{ base }}/scan/iac</code></pre></div>
+<div class="card pad-0"><div class="table-wrap"><table class="table">
+  <thead><tr><th>Method</th><th>Endpoint</th><th>Role</th><th>Description</th></tr></thead>
+  <tbody>
+  {% for m, p, r, d in [
+    ('GET', '/summary', 'viewer', 'Posture score, severity counts, compliance scores, trend'),
+    ('GET', '/findings?status=&severity=&provider=&limit=', 'viewer', 'List findings (active by default; status=all for everything)'),
+    ('GET', '/findings/<id>', 'viewer', 'Finding with Copilot analysis (root cause, fix, Terraform, CLI, blast radius)'),
+    ('PATCH', '/findings/<id>', 'analyst', 'Update status: {"status": "resolved", "note": "..."}'),
+    ('POST', '/findings/<id>/autofix', 'analyst', 'Apply fix to demo/snapshot/upload inventory, re-scan and verify'),
+    ('GET', '/integrations', 'viewer', 'List sources and their scan status'),
+    ('POST', '/integrations/<id>/scan', 'analyst', 'Run a scan now'),
+    ('POST', '/scan/iac', 'analyst', 'Stateless scan of a Terraform/Kubernetes file: {"filename", "content"}'),
+    ('POST', '/scan/secrets', 'analyst', 'Stateless secret scan: {"filename", "content"}'),
+    ('GET', '/compliance', 'viewer', 'Per-framework scores and controls'),
+    ('GET', '/attack-paths', 'viewer', 'Attack paths and choke points'),
+    ('GET', '/rules', 'viewer', 'Rule catalog'),
+    ('POST', '/copilot/chat', 'viewer', 'Ask the Copilot: {"message": "What should I fix first?"}'),
+  ] %}
+  <tr><td><span class="tag" style="font-weight:700">{{ m }}</span></td><td class="mono small">/api/v1{{ p }}</td><td class="small">{{ r }}</td><td class="small muted">{{ d }}</td></tr>
+  {% endfor %}
+  </tbody></table></div></div>
+{% endblock %}

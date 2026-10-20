@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon %}
+{% block title %}Security Copilot{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">Analysis</div><h1>Security Copilot</h1><p>Ask about your posture in plain words. Answers are built from your own findings, compliance scores and attack paths.</p></div>
+  <span class="tag">engine: {{ 'LLM, with offline fallback' if llm else 'offline knowledge base, no API key' }}</span>
+</div>
+<div class="card chat">
+  <div class="messages" id="messages">
+    <div class="msg"><div class="who">Copilot</div><div class="bubble">Hi {{ current_user.full_name.split()[0] }}. I can prioritise fixes, explain any finding, walk through attack paths, or summarise a compliance framework. Pick a question below or ask your own.</div></div>
+  </div>
+  <div class="row wrap" style="gap:6px" id="suggestions" aria-label="Suggested questions">
+    {% for s in ['What should I fix first?', 'Show the attack paths', 'How do we look for PCI DSS?', 'How do I fix public S3 buckets?', 'Give me a posture summary', 'Explain finding #1'] %}
+    <button class="chip" data-suggest="{{ s }}">{{ s }}</button>{% endfor %}
+  </div>
+  <form class="composer" id="composer">
+    <input type="text" id="chat-input" placeholder="e.g. Which finding opens the most attack paths?" autocomplete="off" maxlength="2000" aria-label="Ask the Copilot">
+    <button class="btn primary" type="submit">Ask</button>
+  </form>
+</div>
+<script type="application/json" id="copilot-cfg">{{ {'url': url_for('api.copilot_chat'), 'initials': current_user.initials}|tojson }}</script>
+{% endblock %}

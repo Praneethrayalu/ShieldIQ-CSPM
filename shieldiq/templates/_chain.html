@@ -1,0 +1,12 @@
+{% from "macros.html" import icon %}
+{% set TYPE_ICON = {'ingress': 'globe', 'network': 'lock', 'compute': 'server', 'identity': 'key', 'datastore': 'database'} %}
+<div class="chain" role="list" aria-label="Attack path {{ p.id }}">
+  {% for n in p.nodes %}
+    {% if not loop.first %}{% set e = p.edges[loop.index0 - 1] %}<div class="edge" aria-hidden="true"><div class="ln"></div><div class="el">{{ e.label }}</div></div>{% endif %}
+    <div role="listitem" class="node {{ n.type }} {{ 'sensitive' if n.sensitive }} {{ 'choke' if p.choke_point and p.choke_point.label == n.label }}">
+      <div class="t">{{ icon(TYPE_ICON.get(n.type, 'shield'), 'sm') }} {{ n.type }}{% if n.sensitive %} · sensitive{% endif %}</div>
+      <div class="l">{{ n.label }}</div>
+      {% if n.findings %}<div class="fx">{% for fx in n.findings[:3] %}<a class="badge sev-{{ fx.severity }} nodot" href="{{ url_for('views.finding_detail', fid=fx.id) }}" title="{{ fx.severity }}: {{ fx.title }}">#{{ fx.id }}</a>{% endfor %}{% if n.findings|length > 3 %}<span class="tiny faint mono">+{{ n.findings|length - 3 }}</span>{% endif %}</div>{% endif %}
+    </div>
+  {% endfor %}
+</div>

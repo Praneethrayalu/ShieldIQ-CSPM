@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, sev, status, prov, ring, band, gauge %}
+{% from "_iso.html" import estate %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+{% set SEVS = ['critical', 'high', 'medium', 'low'] %}
+<div class="page-head">
+  <div>
+    <div class="eyebrow">{{ current_user.org.name }}</div>
+    <h1 data-split-h>Security overview</h1>
+    <p><span class="mono">{{ d.integrations|length }}</span> sources · <span class="mono">{{ d.checks }}</span> checks evaluated · last scan <span class="mono">{{ d.last_scan.finished_at|timeago if d.last_scan else 'never' }}</span></p>
+  </div>
+  <div class="row wrap">
+    <a class="btn ghost" href="{{ url_for('views.export_findings', fmt='csv') }}">{{ icon('download', 'sm') }} Export CSV</a>
+  </div>
+</div>
+
+{% if not d.integrations %}
+<section class="card onboard" aria-labelledby="onb-h" data-reveal>
+  <div class="eyebrow">Get started</div>
+  <h2 id="onb-h">Three steps to your first score</h2>
+  <ol class="onb-steps" data-stagger>
+    <li><span class="mono">01</span><b>Connect</b><p>Add a demo environment, import a JSON snapshot, or connect AWS / GitHub read-only.</p></li>
+    <li><span class="mono">02</span><b>Scan</b><p>The first scan runs as soon as a source is added: {{ PRODUCT.checks }} checks, worst first.</p></li>
+    <li><span class="mono">03</span><b>Fix</b><p>Open a finding, apply the fix, and the re-scan proves it worked.</p></li>
+  </ol>
+  <div class="row gap-sm wrap">
+    <a class="btn primary" href="{{ url_for('views.integrations') }}">{{ icon('plus', 'sm') }} Add integration</a>
+    <a class="btn" href="{{ url_for('views.guides') }}">{{ icon('book', 'sm') }} Step-by-step guide for your platform</a>
+  </div>
+</section>
+{% else %}
+{% set t = d.trend %}
+{% set last = t[-1] if t else none %}
+{% set prev = t[-2] if t|length > 1 else none %}
+{% set delta = (last.score - prev.score) if (last and prev and last.score is not none and prev.score is not none) else none %}
+{% set crit = d.severity.critical %}
+
+{# 1 · One clear message: the score, and what to do about it #}
+<section class="dh" aria-labelledby="dh-h" data-reveal>
+  <div class="dh-dial">{{ gauge(d.score) }}</div>
+  <div class="dh-copy">
+    <div class="dh-band">{{ band(d.score) }}{% if delta is not none %}<span class="dh-delta {{ 'up' if delta > 0 else 'down' if delta < 0 else 'flat' }}">{{ '+' if delta > 0 }}{{ delta }} since scan {{ prev.label }}</span>{% endif %}</div>
+    <h2 id="dh-h" class="dh-h">{% if crit %}<em>{{ crit }} critical</em> issue{{ '' if crit == 1 else 's' }}.<br>Fix these first.{% elif d.open %}{{ d.open }} open issue{{ '' if d.open == 1 else 's' }}.<br>No criticals left.{% else %}All clear.<br>Nothing open.{% endif %}</h2>
+    <p class="dh-sub">Security score <b class="mono">{{ d.score if d.score is not none else '–' }}/100</b> across <span class="mono">{{ d.checks }}</span> checks · <span class="mono">{{ d.open }}</span> open · <span class="mono">{{ d.resolved }}</span> resolved</p>
+    {% if d.coverage %}<p class="dh-sub" style="color:var(--sev-high)">{{ icon('alert', 'sm') }} Covers evaluated checks only - partial coverage on {{ d.coverage|map(attribute='name')|join(', ') }}.</p>{% endif %}
+    <div class="dh-cta">
+      {% if crit %}<a class="btn primary fix lg" href="{{ url_for('views.findings', severity='critical') }}">Fix critical issues →</a>{% else %}<a class="btn primary lg" href="{{ url_for('views.findings') }}">Review findings →</a>{% endif %}
+      <a class="dh-link" href="{{ url_for('views.reports_page') }}">Download a report</a>
+    </div>
+  </div>
+</section>
+
+{# 2 · The riskiest attack path, drawn #}
+{% set ep = (d.graph.paths|selectattr('choke_point')|list or d.graph.paths)|first %}
+{% if ep %}
+<section class="card estate-card dh-estate" data-reveal aria-labelledby="estate-h">
+  <div class="card-head"><h3 id="estate-h">Riskiest attack path</h3><a class="dh-link" href="{{ url_for('views.attack_paths') }}">All {{ d.graph.paths|length }} paths →</a></div>
+  <p class="dh-estate-sub">How an attacker could get from the internet to <b>{{ ep.nodes[-1].label }}</b>. Orange blocks have open issues.</p>
+  <div class="estate-stage">{{ estate(ep, 'hot-on path-on', 'dash-estate') }}</div>
+  {% if ep.choke_point %}
+  <div class="dh-estate-foot">
+    <div><span class="eyebrow">Fix here</span><b class="mono">{{ ep.choke_point.label }}</b>{% if d.graph.choke_points %}<span class="faint small"> · breaks {{ d.graph.choke_points[0].paths }} path{{ 's' if d.graph.choke_points[0].paths != 1 }}</span>{% endif %}</div>
+    <a class="btn primary fix" href="{{ url_for('views.finding_detail', fid=ep.choke_point.finding.id) }}">Open the fix →</a>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{# 3 · Three quiet numbers #}
+<div class="dh-nums" data-reveal>
+  <a href="{{ url_for('views.findings') }}"><b class="figure" data-odo="{{ d.open }}">{{ d.open }}</b><span>Open findings</span></a>
+  <a href="{{ url_for('views.attack_paths') }}"><b class="figure" data-odo="{{ d.graph.paths|length }}" data-track="paths" data-value="{{ d.graph.paths|length }}">{{ d.graph.paths|length }}</b><span class="track-delta" data-track-delta hidden></span><span>Attack paths</span></a>
+  {% set weak = d.compliance.values()|selectattr('score')|selectattr('score', 'lt', 60)|list %}
+  <a href="{{ url_for('views.compliance') }}"><b class="figure">{{ weak|length }}<small>/{{ d.compliance|length }}</small></b><span>Frameworks below 60%</span></a>
+</div>
+
+{# 4 · What to do next #}
+<div class="grid g-main">
+  <section class="card" data-reveal>
+    <div class="card-head"><h3>Fix these first</h3><a class="dh-link" href="{{ url_for('views.findings') }}">All findings →</a></div>
+    {% for f in d.top %}
+    <a class="list-item" data-stagger href="{{ url_for('views.finding_detail', fid=f.id) }}">
+      <div class="grow"><div class="ellipsis" style="font-weight:600">{{ f.title }}</div><span class="res">{{ f.resource_id }}</span></div>
+      {{ prov(f.provider) }}
+      <span style="width:84px;display:flex;justify-content:flex-end">{{ sev(f.severity) }}</span>
+    </a>
+    {% else %}<div class="empty">{{ icon('check-circle') }}<div>No open findings.</div></div>{% endfor %}
+  </section>
+  <section class="card" data-reveal>
+    <div class="card-head"><h3>By severity</h3><span class="mono tiny faint">{{ d.open }} open</span></div>
+    {% set mx = [d.severity.values()|max, 1]|max %}
+    <div class="bars">
+      {% for k in SEVS %}
+      <a class="bar-row" href="{{ url_for('views.findings', severity=k) }}">
+        <span class="lbl-b"><i class="sq {{ k }}"></i>{{ k|title }}</span>
+        <span class="track"><span class="fill {{ k }}" data-grow style="width:{{ (100 * d.severity[k] / mx)|round(1) }}%"></span></span>
+        <span class="n">{{ d.severity[k] }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% if t %}<div class="dh-trend"><span class="eyebrow">Score over {{ t|length }} scans</span><div class="pi-spark" data-spark>{{ t|map(attribute='score')|list|sparkline(560, 90) }}</div></div>{% endif %}
+  </section>
+</div>
+
+{# 5 · Compliance and alerts #}
+<div class="grid g-main" style="margin-top:var(--s-6)">
+  <section class="card" data-reveal>
+    <div class="card-head"><h3>Compliance</h3><a class="btn sm ghost" href="{{ url_for('views.compliance') }}">Details →</a></div>
+    {% set SHORT = {'CIS': 'CIS', 'SOC2': 'SOC 2', 'ISO27001': 'ISO 27001', 'PCI': 'PCI DSS', 'GDPR': 'GDPR', 'NIST': 'NIST CSF', 'HIPAA': 'HIPAA'} %}
+    <div class="fw-list">
+      {% for key, fw in d.compliance.items() %}
+      <a class="fw-row" href="{{ url_for('views.compliance', fw=key) }}" title="{{ fw.name }}">
+        <b>{{ SHORT.get(key, fw.name) }}</b>
+        <span class="progress"><span data-grow style="width:{{ fw.score or 0 }}%"></span></span>
+        <span class="mono">{{ fw.score if fw.score is not none else '–' }}{% if fw.score is not none %}<span class="faint">%</span>{% endif %}</span>
+        <span class="mono tiny faint">{{ fw.controls_passed }}/{{ fw.controls_assessed }} controls</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% set hm = d.heatmap %}
+    <div class="row between" style="margin:var(--s-6) 0 var(--s-3)"><span class="eyebrow">Pass rate by service</span><span class="tiny faint">more red = more failing</span></div>
+    <div class="table-wrap">
+      <div class="heat" style="grid-template-columns: 96px repeat({{ hm.services|length }}, minmax(36px, 1fr)); min-width: {{ 96 + 40 * hm.services|length }}px">
+        <div></div>{% for s in hm.services %}<div class="h" title="{{ s }}">{{ s }}</div>{% endfor %}
+        {% for row in hm.rows %}<div class="rl">{{ row.name }}</div>{% for c in row.cells %}{% if c is none %}<div class="c na" title="not assessed">·</div>{% else %}<div class="c {{ 'hot' if c < 50 }}" style="--f:{{ 100 - c }}" title="{{ row.name }} · {{ hm.services[loop.index0] }}: {{ c }}% passing">{{ c }}</div>{% endif %}{% endfor %}{% endfor %}
+      </div>
+    </div>
+  </section>
+  <section class="card" data-reveal>
+    <div class="card-head"><h3>Recent alerts</h3><a class="btn sm ghost" href="{{ url_for('views.alerts') }}">All →</a></div>
+    {% for a in d.alerts %}
+    <div class="list-item" style="align-items:flex-start"><span style="padding-top:2px">{{ sev(a.severity) }}</span><div class="grow"><div class="small">{{ a.title }}</div><div class="tiny faint mono">{{ a.kind|replace('_', ' ') }} · {{ a.created_at|timeago }}</div></div></div>
+    {% else %}<div class="empty small">No alerts yet.</div>{% endfor %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}

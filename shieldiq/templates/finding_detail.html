@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, sev, status, prov, csrf %}
+{% block title %}Finding #{{ f.id }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div style="min-width:0">
+    <a class="crumb" href="{{ url_for('views.findings') }}">← findings / #{{ f.id }}</a>
+    <div class="row wrap" style="gap:var(--s-3)">{{ sev(f.severity) }} {{ status(f.status) }} <span class="tag">{{ f.rule_id }}</span> <span class="tag">{{ f.service }}</span></div>
+    <h1 style="margin-top:var(--s-3)">{{ f.title }}</h1>
+    <p class="row" style="gap:var(--s-2)">{{ prov(f.provider) }}<span class="mono small" style="word-break:break-all">{{ f.resource_id }}</span>{% if f.integration %}<span class="faint small">· {{ f.integration.name }}</span>{% endif %}</p>
+  </div>
+  <div class="head-figs">
+    <div><span class="eyebrow">Priority</span><b class="figure {{ 'c-critical' if a.priority_score >= 80 }}">{{ a.priority_score }}</b><span class="tiny faint mono">/100</span></div>
+    <div><span class="eyebrow">Attack paths</span><b class="figure">{{ a.attack_paths.paths }}</b>{% if a.attack_paths.paths %}<a class="tiny link" href="{{ url_for('views.attack_paths') }}">view</a>{% endif %}</div>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <div class="card">
+    <div class="card-head" style="margin-bottom:var(--s-2)"><h3>Analysis</h3><span class="tag">engine: {{ a.engine }}</span></div>
+    <div class="tabs" data-tabs>
+      <button class="tab active" data-tab="ov">Overview</button>
+      <button class="tab" data-tab="fix">Fix steps</button>
+      {% if a.terraform %}<button class="tab" data-tab="tf">{{ rule.iac_label }}</button>{% endif %}
+      {% if a.cli %}<button class="tab" data-tab="cli">CLI</button>{% endif %}
+      <button class="tab" data-tab="comp">Compliance</button>
+      <button class="tab" data-tab="ev">Evidence</button>
+    </div>
+    <div class="tab-panel active" data-panel="ov">
+      <div class="stack lg">
+        <div><div class="eyebrow">what we found</div><p style="margin:6px 0 0;max-width:70ch">{{ f.detail }}</p></div>
+        <div><div class="eyebrow">root cause</div><p style="margin:6px 0 0;max-width:70ch">{{ a.root_cause }}</p></div>
+        <div><div class="eyebrow">impact</div><p style="margin:6px 0 0;max-width:70ch">{{ a.impact }}</p></div>
+        <div><div class="eyebrow">blast radius</div><p style="margin:6px 0 0;max-width:70ch">{{ a.blast_radius }}</p>
+          {% if a.attack_paths.path_ids %}<a class="link small" href="{{ url_for('views.attack_paths') }}">View attack paths →</a>{% endif %}</div>
+      </div>
+    </div>
+    <div class="tab-panel" data-panel="fix"><ol class="steps-list">{% for s in a.steps %}<li>{{ s }}</li>{% endfor %}</ol></div>
+    {% if a.terraform %}<div class="tab-panel" data-panel="tf"><pre data-copy><code>{{ a.terraform }}</code></pre>
+      <a class="btn sm" style="margin-top:10px" href="{{ url_for('views.finding_script', fid=f.id, kind='iac') }}">{{ icon('download', 'sm') }} Download .{{ rule.iac_kind }}</a></div>{% endif %}
+    {% if a.cli %}<div class="tab-panel" data-panel="cli"><pre data-copy><code>{{ a.cli }}</code></pre>
+      <a class="btn sm" style="margin-top:10px" href="{{ url_for('views.finding_script', fid=f.id, kind='sh') }}">{{ icon('download', 'sm') }} Download script</a></div>{% endif %}
+    <div class="tab-panel" data-panel="comp"><div class="row wrap">{% for c in a.compliance %}<span class="tag">{{ c }}</span>{% endfor %}</div></div>
+    <div class="tab-panel" data-panel="ev">
+      <pre data-copy><code>{{ {'rule': f.rule_id, 'resource': f.resource_id, 'detail': f.detail, 'evidence': f.evidence or {}, 'first_seen': f.first_seen|string, 'last_seen': f.last_seen|string}|tojson(indent=2) }}</code></pre>
+    </div>
+  </div>
+
+  <div class="stack lg">
+    <div class="card">
+      <div class="card-head"><h3>Remediate</h3></div>
+      {% if current_user.can('remediate') %}
+        {% if a.auto_fix_available and f.is_active %}
+        <form method="post" action="{{ url_for('views.finding_autofix', fid=f.id) }}" data-loading="Fixing &amp; re-scanning…" data-confirm="Apply the fix to {{ f.integration.name }} and re-scan to verify?">
+          {{ csrf() }}<button class="btn primary fix block lg" type="submit">Auto-fix &amp; verify</button>
+        </form>
+        <div class="hint">Applies the fix to this {{ f.integration.mode }} inventory, re-scans it, and confirms the check now passes.</div>
+        {% elif f.integration and f.integration.mode == 'live' %}
+        <div class="hint">Live account: ShieldIQ never changes production for you. Run the script or Terraform below, then re-scan.</div>
+        {% endif %}
+        <div class="row wrap" style="margin-top:12px">
+          <a class="btn sm" href="{{ url_for('views.finding_script', fid=f.id, kind='sh') }}">{{ icon('terminal', 'sm') }} Fix script</a>
+          {% if a.terraform %}<a class="btn sm" href="{{ url_for('views.finding_script', fid=f.id, kind='iac') }}">{{ icon('code', 'sm') }} {{ rule.iac_label }}</a>{% endif %}
+        </div>
+        <form method="post" action="{{ url_for('views.finding_pr', fid=f.id) }}" style="margin-top:12px" data-loading="Opening PR…">
+          {{ csrf() }}<button class="btn sm block" type="submit">{{ icon('git', 'sm') }} Open GitHub pull request</button>
+          <div class="hint">{% if current_user.org.github_repo %}Commits the fix to a new branch in <b>{{ current_user.org.github_repo }}</b>.{% else %}Set a repository + token in <a class="link" href="{{ url_for('views.settings') }}">Settings</a> first.{% endif %}</div>
+        </form>
+      {% else %}<p class="muted small">Your role ({{ current_user.role }}) can view but not remediate.</p>{% endif %}
+    </div>
+
+    {% if current_user.can('triage') %}
+    <div class="card">
+      <div class="card-head"><h3>Triage</h3></div>
+      <form method="post" action="{{ url_for('views.finding_status', fid=f.id) }}">
+        {{ csrf() }}
+        <div class="field"><label>Status</label><select name="status">{% for s in STATUSES %}<option value="{{ s }}" {{ 'selected' if f.status == s }}>{{ s|replace('_', ' ')|title }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Note</label><input type="text" name="note" placeholder="Required when accepting a risk" value=""></div>
+        <button class="btn block" type="submit">Update status</button>
+      </form>
+      {% if f.status_note %}<div class="hint" style="margin-top:10px">Last note: {{ f.status_note }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-head"><h3>History</h3></div>
+      <div class="timeline">
+        <div class="tl bad"><b class="small">First detected</b><div class="tiny muted">{{ f.first_seen.strftime('%d %b %Y %H:%M') }} UTC</div></div>
+        <div class="tl"><b class="small">Last seen</b><div class="tiny muted">{{ f.last_seen.strftime('%d %b %Y %H:%M') }} UTC</div></div>
+        {% for r in rems %}<div class="tl {{ 'ok' if r.status in ('verified', 'pr_opened') else 'bad' }}"><b class="small">{{ r.mode|replace('_', ' ')|title }}: {{ r.status|replace('_', ' ') }}</b>
+          <div class="tiny muted">{{ r.created_at.strftime('%d %b %H:%M') }} · {{ r.executed_by }}</div>
+          {% for s in r.steps or [] %}<div class="tiny">{{ '✓' if s.status in ('ok', 'verified') else '✗' }} {{ s.step }}</div>{% endfor %}
+          {% if r.pr_url %}<a class="link tiny" href="{{ r.pr_url }}" target="_blank" rel="noopener">{{ r.pr_url }}</a>{% endif %}</div>{% endfor %}
+        {% if f.resolved_at %}<div class="tl ok"><b class="small">Resolved</b><div class="tiny muted">{{ f.resolved_at.strftime('%d %b %Y %H:%M') }} UTC</div></div>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf %}
+{% block title %}Team{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Workspace</div><h1>Team</h1><p>Role-based access: <b>admin</b> manages integrations, users and settings · <b>analyst</b> scans, triages, remediates and reports · <b>viewer</b> read-only.</p></div></div>
+<div class="grid g-main">
+  <div class="card pad-0"><div class="table-wrap"><table class="table">
+    <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
+    <tbody>{% for u in items %}<tr>
+      <td><div class="row"><span class="avatar" style="width:32px;height:32px;font-size:12px">{{ u.initials }}</span><div><b>{{ u.full_name }}</b><div class="tiny muted">{{ u.email }}</div></div></div></td>
+      <td>{% if u.id != current_user.id %}<form method="post" class="row">{{ csrf() }}<input type="hidden" name="action" value="role"><input type="hidden" name="user_id" value="{{ u.id }}">
+        <select name="role" style="width:auto;padding:6px 30px 6px 10px" data-autosubmit-select>{% for r in ROLES %}<option value="{{ r }}" {{ 'selected' if u.role == r }}>{{ r }}</option>{% endfor %}</select></form>{% else %}<span class="tag">{{ u.role }} (you)</span>{% endif %}</td>
+      <td><span class="badge {{ 'st-connected' if u.is_active_user else 'st-error' }}">{{ 'active' if u.is_active_user else 'disabled' }}</span></td>
+      <td class="small muted">{{ u.last_login_at|timeago }}</td>
+      <td>{% if u.id != current_user.id %}<form method="post">{{ csrf() }}<input type="hidden" name="action" value="toggle"><input type="hidden" name="user_id" value="{{ u.id }}"><button class="btn sm ghost" type="submit">{{ 'Disable' if u.is_active_user else 'Enable' }}</button></form>{% endif %}</td>
+    </tr>{% endfor %}</tbody></table></div></div>
+  <div class="card">
+    <h3 class="row" style="margin-bottom:14px">{{ icon('plus') }} Add team member</h3>
+    <form method="post">{{ csrf() }}<input type="hidden" name="action" value="create">
+      <div class="field"><label>Full name</label><input type="text" name="full_name" required></div>
+      <div class="field"><label>Email</label><input type="email" name="email" required></div>
+      <div class="field"><label>Role</label><select name="role">{% for r in ROLES %}<option value="{{ r }}" {{ 'selected' if r == 'analyst' }}>{{ r }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Temporary password</label><input type="password" name="password" autocomplete="new-password" required><div class="hint">{{ rules }}</div></div>
+      <button class="btn primary block" type="submit">Add member</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

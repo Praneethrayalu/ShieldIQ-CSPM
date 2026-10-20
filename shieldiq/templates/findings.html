@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, sev, status, prov, csrf %}
+{% block title %}Findings{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">Security</div><h1>Findings</h1><p><span class="mono">{{ findings|length }}</span> result{{ '' if findings|length == 1 else 's' }}, worst first. Open one for its root cause, the fix as code, and auto-remediation.</p></div>
+  <div class="row wrap">
+    <a class="btn" href="{{ url_for('views.export_findings', fmt='csv') }}">{{ icon('download', 'sm') }} CSV</a>
+    <a class="btn" href="{{ url_for('views.export_findings', fmt='json') }}">{{ icon('download', 'sm') }} JSON</a>
+  </div>
+</div>
+<div class="filters">
+  <form method="get" class="row wrap" style="gap:var(--s-2)" data-autosubmit>
+    <div style="flex:1;min-width:220px"><input type="search" name="q" value="{{ args.get('q', '') }}" placeholder="Search title, resource ID, rule ID…" aria-label="Search findings"></div>
+    <select name="status" style="width:auto">
+      <option value="active" {{ 'selected' if status == 'active' }}>Active (open + in progress)</option>
+      {% for s in STATUSES %}<option value="{{ s }}" {{ 'selected' if status == s }}>{{ s|replace('_', ' ')|title }}</option>{% endfor %}
+      <option value="all" {{ 'selected' if status == 'all' }}>All statuses</option>
+    </select>
+    <select name="provider" style="width:auto"><option value="">All providers</option>
+      {% for k, v in PROVIDERS.items() %}<option value="{{ k }}" {{ 'selected' if args.get('provider') == k }}>{{ v.label }}</option>{% endfor %}</select>
+    <select name="integration" style="width:auto"><option value="">All sources</option>
+      {% for i in integrations %}<option value="{{ i.id }}" {{ 'selected' if args.get('integration') == i.id|string }}>{{ i.name }}</option>{% endfor %}</select>
+    <input type="hidden" name="severity" value="{{ args.get('severity', '') }}">
+    <button class="btn" type="submit">{{ icon('search', 'sm') }} Filter</button>
+  </form>
+  <div class="row wrap" style="margin-top:var(--s-3);gap:6px" role="group" aria-label="Severity">
+    {% set base = args.to_dict() %}
+    <a class="chip {{ 'active' if not args.get('severity') }}" href="{{ url_for('views.findings', **dict(base, severity='')) }}">All severities</a>
+    {% for s in SEVERITIES %}<a class="chip {{ 'active' if args.get('severity') == s }}" href="{{ url_for('views.findings', **dict(base, severity=s)) }}"><i class="sq {{ s }}"></i>{{ s|title }}</a>{% endfor %}
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('views.findings_bulk') }}" class="card pad-0" data-bulk data-reveal>
+  {{ csrf() }}
+  {% if current_user.can('triage') and findings %}
+  <div class="row wrap bulkbar">
+    <label class="checkbox" style="margin:0"><input type="checkbox" data-check-all> Select all</label>
+    <span class="muted small" data-selected-count>0 selected</span>
+    <select name="status" style="width:auto;margin-left:auto"><option value="in_progress">Mark in progress</option><option value="resolved">Mark resolved</option><option value="open">Re-open</option></select>
+    <button class="btn sm" type="submit">Apply</button>
+  </div>
+  {% endif %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead><tr>{% if current_user.can('triage') %}<th style="width:36px"><span class="sr">Select</span></th>{% endif %}<th style="width:110px">Severity</th><th>Finding · resource</th><th>Source</th><th>Status</th><th class="num">First seen</th></tr></thead>
+    <tbody>
+    {% for f in findings %}
+      <tr data-stagger>
+        {% if current_user.can('triage') %}<td><input type="checkbox" name="ids" value="{{ f.id }}" data-row-check aria-label="Select finding #{{ f.id }}"></td>{% endif %}
+        <td>{{ sev(f.severity) }}</td>
+        <td class="title-cell"><a href="{{ url_for('views.finding_detail', fid=f.id) }}">{{ f.title }}</a><span class="res" title="{{ f.resource_id }}">{{ f.resource_id }}</span><div class="tiny faint"><span class="mono">#{{ f.id }} · {{ f.rule_id }}</span> · {{ f.detail }}</div></td>
+        <td><div class="row">{{ prov(f.provider) }}<span class="small muted ellipsis" style="max-width:170px">{{ f.integration.name if f.integration else '—' }}</span></div></td>
+        <td>{{ status(f.status) }}</td>
+        <td class="num tiny muted">{{ f.first_seen|timeago }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6"><div class="empty">{{ icon('check-circle') }}<div>No findings match these filters.</div></div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</form>
+{% endblock %}

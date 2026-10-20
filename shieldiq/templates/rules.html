@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, sev, prov %}
+{% block title %}Rule library{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="eyebrow">Security</div><h1>Rule library</h1><p>{{ items|length }} checks{{ ' for ' + PROVIDERS[selected].label if selected else '' }}. Each has root cause, impact, fix steps, Terraform and CLI, and compliance mappings.</p></div></div>
+<div class="row wrap" style="gap:8px;margin-bottom:16px">
+  <a class="chip {{ 'active' if not selected }}" href="{{ url_for('views.rules_catalog') }}">All</a>
+  {% for k, v in PROVIDERS.items() %}<a class="chip {{ 'active' if selected == k }}" href="{{ url_for('views.rules_catalog', provider=k) }}">{{ v.label }}</a>{% endfor %}
+</div>
+<div class="card pad-0"><div class="table-wrap"><table class="table">
+  <thead><tr><th>Rule</th><th>Check</th><th>Severity</th><th>Auto-fix</th><th>Maps to</th></tr></thead>
+  <tbody>{% for r in items %}<tr>
+    <td><div class="row">{{ prov(r.provider) }}<span class="mono small" style="white-space:nowrap">{{ r.id }}</span></div></td>
+    <td><b>{{ r.title }}</b><div class="tiny muted">{{ r.service }} · {{ r.description }}</div></td>
+    <td>{{ sev(r.severity) }}</td>
+    <td>{% if r.fix %}<span class="badge st-connected">yes</span>{% else %}<span class="faint">–</span>{% endif %}</td>
+    <td><div class="row wrap" style="gap:4px;max-width:360px">{% for c in control_labels(r)[:5] %}<span class="tag">{{ c }}</span>{% endfor %}{% if control_labels(r)|length > 5 %}<span class="tiny faint">+{{ control_labels(r)|length - 5 }}</span>{% endif %}</div></td>
+  </tr>{% endfor %}</tbody>
+</table></div></div>
+{% endblock %}

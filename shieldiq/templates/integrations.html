@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, prov, status, csrf %}
+{% block title %}Integrations{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">Security</div><h1>Integrations</h1><p>Each source becomes a normalized inventory that ShieldIQ's rules run against - every source with the checks for its own platform, <span class="mono">{{ PRODUCT.checks }}</span> in the library: demo data, a JSON snapshot you export, an uploaded file, or a live read-only connection.</p></div>
+  <div class="row gap-sm wrap"><a class="btn" href="{{ url_for('views.guides') }}">{{ icon('book', 'sm') }} Setup guides</a>
+  {% if current_user.can('integrate') %}<button class="btn primary" data-open-modal="connect">{{ icon('plus', 'sm') }} Add integration</button>{% endif %}</div>
+</div>
+{% if not items %}
+<div class="card empty">{{ icon('plug') }}<h2>No sources yet</h2><p>Add a demo environment to explore, or connect AWS / GitHub live. Not sure how? The <a class="link" href="{{ url_for('views.guides') }}">setup guides</a> walk through each platform step by step.</p></div>
+{% endif %}
+<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr))">
+{% for i in items %}
+  <div class="card integ-card">
+    <div class="row top between">
+      <div class="row">{{ prov(i.provider, 'lg') }}<div style="min-width:0"><b class="ellipsis" style="display:block" title="{{ i.name }}">{{ i.name }}</b><div class="tiny muted">{{ PROVIDERS[i.provider].label }}</div></div></div>
+      {{ status(i.status) }}
+    </div>
+    <div class="row wrap" style="gap:6px"><span class="tag">{{ i.mode }}</span>{% if i.config and i.config.get('target') %}<span class="tag">{{ i.config.target }}</span>{% endif %}{% if i.config and i.config.get('region') %}<span class="tag">{{ i.config.region }}</span>{% endif %}</div>
+    <div class="meta">
+      <div><span class="tiny muted">Open</span><b>{{ counts[i.id] }}</b></div>
+      <div><span class="tiny muted">Checks</span><b>{{ (i.check_stats or {}).values()|map(attribute='total')|sum }}</b></div>
+      <div><span class="tiny muted">Last scan</span><b class="small" style="font-size:13px;margin-top:3px">{{ i.last_scan_at|timeago }}</b></div>
+    </div>
+    {% if i.last_error %}<div class="small" style="color:var(--sev-critical)">{{ icon('alert', 'sm') }} {{ i.last_error }}</div>{% endif %}
+    <div class="row wrap">
+      {% if current_user.can('scan') %}<form method="post" action="{{ url_for('views.integration_scan', iid=i.id) }}" data-loading="Scanning…">{{ csrf() }}<button class="btn sm" type="submit">{{ icon('refresh', 'sm') }} Scan</button></form>{% endif %}
+      <a class="btn sm" href="{{ url_for('views.findings', integration=i.id) }}">{{ icon('alert', 'sm') }} Findings</a>
+      <a class="btn sm ghost" href="{{ url_for('views.integration_inventory', iid=i.id) }}" title="Download the inventory ShieldIQ scanned">{{ icon('download', 'sm') }}</a>
+      {% if current_user.can('integrate') %}<form method="post" action="{{ url_for('views.integration_delete', iid=i.id) }}" data-confirm="Remove {{ i.name }} and all its findings?" style="margin-left:auto">{{ csrf() }}<button class="btn sm ghost" type="submit" title="Remove">{{ icon('trash', 'sm') }}</button></form>{% endif %}
+    </div>
+  </div>
+{% endfor %}
+</div>
+
+<div class="modal" id="connect" data-modal>
+  <div class="modal-card">
+    <div class="row between" style="margin-bottom:16px"><h2>Add integration</h2><button class="icon-btn" data-close-modal aria-label="Close">{{ icon('x') }}</button></div>
+    <form method="post" action="{{ url_for('views.integration_new') }}" enctype="multipart/form-data" data-loading="Connecting &amp; scanning…" id="connect-form">
+      {{ csrf() }}
+      <div class="field"><label>Provider</label>
+        <select name="provider" id="cf-provider" required>
+          {% for k, v in PROVIDERS.items() if k != 'code' %}<option value="{{ k }}" data-live="{{ 1 if v.live else 0 }}">{{ v.label }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label>Mode</label>
+        <div class="seg" id="cf-mode">
+          <label><input type="radio" name="mode" value="demo" checked><span>Demo data</span></label>
+          <label><input type="radio" name="mode" value="snapshot"><span>Import JSON snapshot</span></label>
+          <label data-live-only><input type="radio" name="mode" value="live"><span>Live (read-only)</span></label>
+        </div></div>
+      <div class="field"><label>Display name</label><input type="text" name="name" placeholder="e.g. AWS production"></div>
+      <div data-mode-panel="demo" class="hint">Loads a realistic sample environment with intentional misconfigurations so you can explore every feature.</div>
+      <div data-mode-panel="snapshot" hidden>
+        <label class="dropzone" data-dropzone>{{ icon('upload') }}<div data-dz-label>Drop a JSON inventory here or click to choose</div><input type="file" name="snapshot" accept=".json,application/json"></label>
+        <div class="hint">Export your environment into ShieldIQ's inventory format. <a class="link" href="#" data-template-link>Download a template for this provider</a>. How to fill it in: <a class="link" href="{{ url_for('views.guides') }}#providers">setup guides</a>.</div>
+      </div>
+      <div data-mode-panel="live" hidden>
+        <div data-live-provider="aws">
+          <div class="grid g-2" style="gap:12px">
+            <div class="field"><label>Access key ID</label><input type="text" name="access_key_id" autocomplete="off"></div>
+            <div class="field"><label>Secret access key</label><input type="password" name="secret_access_key" autocomplete="off"></div>
+          </div>
+          <div class="grid g-2" style="gap:12px">
+            <div class="field"><label>…or local AWS CLI profile</label><input type="text" name="profile" placeholder="default"></div>
+            <div class="field"><label>Region</label><input type="text" name="region" value="us-east-1"></div>
+          </div>
+          <div class="hint">Use a user with only the AWS-managed <b>SecurityAudit</b> policy. Keys are encrypted at rest (Fernet). Requires <code>pip install -r requirements-cloud.txt</code>.</div>
+        </div>
+        <div data-live-provider="github">
+          <div class="field"><label>Owner or owner/repo</label><input type="text" name="target" placeholder="octocat or octocat/Hello-World"></div>
+          <div class="field"><label>Token (optional)</label><input type="password" name="token" autocomplete="off" placeholder="Public repos work without a token"></div>
+          <div class="hint">Reads branch protection, Dependabot / SECURITY.md presence and scans repository files for leaked secrets.</div>
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:18px"><button type="button" class="btn ghost" data-close-modal>Cancel</button><button class="btn primary" type="submit">{{ icon('plug', 'sm') }} Connect &amp; scan</button></div>
+    </form>
+    <script type="application/json" id="template-urls">{{ template_urls|tojson }}</script>
+  </div>
+</div>
+{% endblock %}

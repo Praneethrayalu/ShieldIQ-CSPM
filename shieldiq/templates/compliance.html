@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, ring, status, band, gauge %}
+{% block title %}Compliance{% endblock %}
+{% block content %}
+{% set cur = comp[fw] %}
+<div class="page-head">
+  <div><div class="eyebrow">Security</div><h1>Compliance</h1><p>Every check is mapped to framework controls. Pick a framework to see which controls fail and why.</p></div>
+  <form method="post" action="{{ url_for('views.report_generate') }}" data-loading="Building PDF…">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="framework" value="{{ fw }}">
+    {% if current_user.can('report') %}<button class="btn primary" type="submit">{{ icon('download', 'sm') }} {{ cur.name }} PDF report</button>{% endif %}
+  </form>
+</div>
+<div class="seg" style="margin-bottom:var(--s-6)">{% for k, v in comp.items() %}<a class="{{ 'active' if k == fw }}" href="{{ url_for('views.compliance', fw=k) }}">{{ v.name }}</a>{% endfor %}</div>
+<section class="card posture" data-reveal>
+  <div class="posture-grid">
+    <div class="posture-score">
+      <div class="eyebrow">{{ cur.name }} · {{ cur.version }}</div>
+      {{ gauge(cur.score, 'Passing', '% of controls', 'on-paper sm') }}
+      {{ band(cur.score) }}
+    </div>
+    <div class="posture-trend">
+      <dl class="spec">
+        <dt>Controls passing</dt><dd><span class="mono">{{ cur.controls_passed }}</span> of <span class="mono">{{ cur.controls_assessed }}</span> assessed</dd>
+        <dt>Not covered</dt><dd><span class="mono">{{ cur.controls_total - cur.controls_assessed }}</span> of <span class="mono">{{ cur.controls_total }}</span> controls have no checks from your current sources</dd>
+        <dt>Open findings</dt><dd><a class="link" href="{{ url_for('views.findings') }}"><span class="mono">{{ cur.failed }}</span></a> mapped to this framework</dd>
+        <dt>Scoring</dt><dd class="small muted">A control's pass rate is the severity-weighted share of its checks passing; the framework score is the average across assessed controls.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+<div class="card pad-0" style="margin-top:var(--s-6)" data-reveal>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Control</th><th>Description</th><th>Status</th><th style="width:180px">Pass rate</th><th>Checks</th><th class="num">Open findings</th></tr></thead>
+    <tbody>
+    {% for c in cur.controls %}
+    <tr data-stagger>
+      <td class="mono" style="font-weight:600">{{ c.id }}</td>
+      <td>{{ c.name }}</td>
+      <td>{{ status(c.status) }}</td>
+      <td>{% if c.score is not none %}<div class="row"><div class="progress" style="flex:1"><span data-grow style="width:{{ c.score }}%"></span></div><span class="small mono" style="width:40px;text-align:right">{{ c.score }}%</span></div>{% else %}<span class="faint small">no checks yet</span>{% endif %}</td>
+      <td><div class="row wrap" style="gap:4px">{% for rid in c.rules[:6] %}<span class="tag" title="{{ rules[rid].title if rid in rules }}">{{ rid }}</span>{% endfor %}{% if c.rules|length > 6 %}<span class="tiny faint">+{{ c.rules|length - 6 }}</span>{% endif %}</div></td>
+      <td class="num">{% if c.findings %}<a class="link" href="{{ url_for('views.findings', rule=c.rules|join(',')) }}">{{ c.findings }}</a>{% else %}<span class="faint">0</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+<p class="tiny faint" style="margin-top:12px">Mappings are an engineering aid for prioritisation, not a formal audit opinion.</p>
+{% endblock %}
