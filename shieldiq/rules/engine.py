@@ -6,6 +6,7 @@ inventory and yield one CheckResult per resource they evaluated. Because live
 data, demo data, uploaded snapshots and Terraform files all become the same
 inventory shape, every rule works on all of them.
 """
+import shlex
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, List, Optional
 
@@ -43,12 +44,47 @@ class Rule:
     IAC_LABELS = {"tf": "Terraform", "yaml": "Kubernetes YAML", "py": "Secure code"}
 
     @property
+    def iac_quote(self):
+        return "hcl" if self.iac_kind == "tf" else "line"
+
+    @property
     def iac_label(self):
         return self.IAC_LABELS.get(self.iac_kind, "IaC")
 
-    def render(self, text: str, resource_id: str) -> str:
-        short = resource_id.split("/")[-1]
-        return (text or "").replace("{resource}", short).replace("{resource_id}", resource_id)
+    def render(self, text: str, resource_id: str, quote: Optional[str] = None) -> str:
+        """Fill {resource} (short name) / {resource_id} (full id) into a fix snippet.
+
+        quote="shell": values are shlex.quote()d - resource ids come from scanned/uploaded data and must never
+        be able to inject shell syntax into a generated fix script. quote="hcl": values are escaped for a
+        Terraform string literal. None: plain text (human-readable steps)."""
+        short = short_name(resource_id)
+        full = resource_id or ""
+        if quote == "shell":
+            short, full = shlex.quote(short), shlex.quote(full)
+        elif quote == "hcl":
+            short, full = hcl_escape(short), hcl_escape(full)
+        elif quote == "line":  # YAML / code snippets: no line breaks or control characters can be injected
+            short, full = comment_safe(short), comment_safe(full)
+        return (text or "").replace("{resource}", short).replace("{resource_id}", full)
+
+
+def short_name(resource_id: str) -> str:
+    """Name a CLI expects: last path segment, and for path-less ARNs (S3 buckets: arn:aws:s3:::bucket) the part
+    after the last ':' - so S3 commands get the bucket name, not the ARN."""
+    short = (resource_id or "").split("/")[-1]
+    if short.startswith("arn:"):
+        short = short.split(":")[-1]
+    return short
+
+
+def hcl_escape(value: str) -> str:
+    value = "".join(ch for ch in (value or "") if ch >= " " and ch != "\x7f")
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("${", "$${").replace("%{", "%%{")
+
+
+def comment_safe(value: str) -> str:
+    """One-line, control-character-free text for a '# ...' comment in a generated script."""
+    return "".join(ch if ch >= " " and ch != "\x7f" else "?" for ch in str(value or ""))
 
 
 def rule(id, provider, service, title, severity, description, tags, root_cause, impact, steps,
@@ -83,6 +119,7 @@ def rules_for(provider) -> List[Rule]:
 class Evaluation:
     rule: Rule
     results: List[CheckResult]
+    error: Optional[str] = None  # set when the rule itself crashed: nothing was evaluated
 
     @property
     def failed(self):
@@ -93,10 +130,12 @@ def evaluate(provider: str, inventory: dict) -> List[Evaluation]:
     out = []
     for r in rules_for(provider):
         try:
-            results = list(r.check(inventory or {}))
-        except Exception as exc:  # a broken rule must never kill a scan
-            results = [CheckResult(resource_id="rule-error", passed=True, detail=f"rule error: {exc}")]
-        out.append(Evaluation(rule=r, results=results))
+            results, error = list(r.check(inventory or {})), None
+        except Exception as exc:  # a broken rule must never kill a scan...
+            # ...but it must not count as "passed" either: no results, and the error is reported so the
+            # scan is marked partial and this rule's existing findings are left untouched (not resolved).
+            results, error = [], f"{exc.__class__.__name__}: {str(exc)[:200]}"
+        out.append(Evaluation(rule=r, results=results, error=error))
     return out
 
 

@@ -1,7 +1,33 @@
 """AWS rules (read-only checks against the normalized AWS inventory)."""
 from .engine import CheckResult, fixer, find, open_to_world, port_in, rule
+from .iam_policy import analyze as analyze_iam
 
 ADMIN_PORTS = {22: "SSH", 3389: "RDP"}
+# Ports that must never face the internet: remote admin + datastores/caches/search/consoles.
+RISKY_PORTS = {
+    22: "SSH", 23: "Telnet", 3389: "RDP", 5900: "VNC", 445: "SMB",
+    3306: "MySQL", 5432: "PostgreSQL", 1433: "MSSQL", 1521: "Oracle", 27017: "MongoDB", 6379: "Redis",
+    9200: "Elasticsearch", 9300: "Elasticsearch transport", 5601: "Kibana", 11211: "Memcached",
+    5984: "CouchDB", 9042: "Cassandra", 2375: "Docker API", 2376: "Docker API (TLS)",
+}
+_ICMP = ("icmp", "icmpv6", "1", "58")
+
+PAB_KEYS = ("block_public_acls", "ignore_public_acls", "block_public_policy", "restrict_public_buckets")
+
+
+def _effective_pab(inv, b):
+    """Effective Block Public Access per setting = bucket-level OR account-level (s3control).
+    Returns {setting: True/False/None}; None = cannot tell (a read failed and the other level is not True)."""
+    bucket = None if "public_access_block" in b.get("_unknown", ()) else (b.get("public_access_block") or {})
+    # account-level setting (s3control). Key absent = never read (demo/IaC/older snapshots): treated as not set,
+    # exactly as before v2.2. Key present with None = the read failed: unknown.
+    acct_known = "s3_account_public_access_block" in inv
+    acct = inv.get("s3_account_public_access_block") if acct_known else {}
+    out = {}
+    for k in PAB_KEYS:
+        vals = [None if bucket is None else bool(bucket.get(k)), None if acct is None else bool(acct.get(k))]
+        out[k] = True if True in vals else (None if None in vals else False)
+    return out
 
 
 def _buckets(inv):
@@ -30,15 +56,19 @@ resource "aws_s3_bucket_public_access_block" "{resource}" {
           "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true",
       refs=["CIS AWS 2.1.4"], asset="datastore")
 def s3_block_public(inv):
+    acct = inv.get("s3_account_public_access_block")
     for b in _buckets(inv):
-        if "public_access_block" in b.get("_unknown", ()):
-            continue  # the PAB read failed: unknown is neither pass nor fail
-        pab = b.get("public_access_block") or {}
-        missing = [k for k in ("block_public_acls", "ignore_public_acls", "block_public_policy",
-                               "restrict_public_buckets") if not pab.get(k)]
+        eff = _effective_pab(inv, b)
+        missing = [k for k, v in eff.items() if v is False]
+        if any(v is None for v in eff.values()) and not all(v is True for v in eff.values()):
+            if not missing:
+                continue  # some settings unknown, none known off: neither pass nor fail
+        src = "bucket + account level" if acct else "bucket level"
         yield CheckResult(f"arn:aws:s3:::{b['name']}", not missing,
-                          f"Disabled settings: {', '.join(missing)}" if missing else "All settings enabled",
-                          {"missing": missing})
+                          f"Disabled settings (effective, {src}): {', '.join(missing)}" if missing
+                          else ("All four settings on" + (" (via account-level Block Public Access)"
+                                                          if acct and all(acct.get(k) for k in PAB_KEYS) else "")),
+                          {"effective": eff, "account_level": acct, "bucket_level": b.get("public_access_block")})
 
 
 @fixer("AWS-S3-001")
@@ -72,13 +102,36 @@ resource "aws_s3_bucket_ownership_controls" "{resource}" {
 def s3_public_acl(inv):
     for b in _buckets(inv):
         unknown = set(b.get("_unknown", ()))
-        known = {k: b.get(k) for k in ("acl_public", "policy_public") if k not in unknown}
-        if not any(bool(v) for v in known.values()) and (len(known) < 2 or any(v is None for v in known.values())):
-            continue  # "not public" needs both grants read; a known public grant still reports
-        public = any(bool(v) for v in known.values())
-        how = [w for w, v in (("ACL", known.get("acl_public")), ("bucket policy", known.get("policy_public"))) if v]
-        yield CheckResult(f"arn:aws:s3:::{b['name']}", not public,
-                          f"Public via {' and '.join(how)}" if public else "Not public")
+        eff = _effective_pab(inv, b)
+        # A public grant only makes the bucket public if Block Public Access does not neutralise it:
+        # IgnorePublicAcls voids public ACL grants, RestrictPublicBuckets voids public bucket policies.
+        channels = (("ACL", "acl_public", "ignore_public_acls"), ("bucket policy", "policy_public", "restrict_public_buckets"))
+        public, unknown_ch, neutralised, caveats = [], [], [], []
+        for label, key, guard in channels:
+            v = None if key in unknown else b.get(key)
+            if v is None:
+                unknown_ch.append(label)
+            elif v:
+                if eff[guard] is True:
+                    neutralised.append(f"{label} (blocked by {guard})")
+                else:
+                    # the public grant itself is read evidence; if Block Public Access could not be read we
+                    # still report it, but say that it might be neutralised
+                    public.append(label)
+                    if eff[guard] is None:
+                        caveats.append(f"{guard} could not be read, so the {label} grant may be neutralised")
+        if not public and unknown_ch:
+            continue  # "not public" needs every channel read; a known public grant still reports
+        how = list(public)
+        grantees = b.get("acl_public_grantees") or []
+        if "ACL" in public and grantees:
+            how[how.index("ACL")] = "ACL (" + ", ".join(grantees) + ")"
+        detail = (f"Public via {' and '.join(how)}" + (f" ({'; '.join(caveats)})" if caveats else "")) if public else \
+            ("Not public" + (f"; public grant neutralised: {', '.join(neutralised)}" if neutralised else ""))
+        yield CheckResult(f"arn:aws:s3:::{b['name']}", not public, detail,
+                          {"public_via": public, "neutralised": neutralised, "acl_grantees": grantees,
+                           "caveats": caveats,
+                           "effective_block_public_access": eff})
 
 
 @fixer("AWS-S3-002")
@@ -274,39 +327,73 @@ def _fix_key_age(inv, rid):
     return True
 
 
-@rule("AWS-IAM-005", "aws", "IAM", "IAM principal has full administrator privileges", "high",
-      "Avoid attaching AdministratorAccess (or Action * on Resource *) directly to users and roles.",
+@rule("AWS-IAM-005", "aws", "IAM", "IAM principal has full administrator privileges or can escalate to them", "high",
+      "Avoid granting Action * on Resource * (AdministratorAccess or equivalent) and privilege-escalation "
+      "permissions (iam:PassRole + compute create, iam:CreatePolicyVersion, iam:Attach*/Put*Policy, ...) to users and roles.",
       ["access"],
-      "The AdministratorAccess managed policy, or an inline policy allowing *:*, is attached.",
-      "Anyone who compromises this identity (or a workload using the role) controls the whole account.",
-      ["Identify the actions this principal actually uses (IAM Access Analyzer / last accessed data).",
-       "Replace AdministratorAccess with a scoped policy.",
-       "Keep break-glass admin access behind MFA and SSO."],
-      cli="aws iam detach-role-policy --role-name {resource} --policy-arn arn:aws:iam::aws:policy/AdministratorAccess",
+      "A policy document attached to this principal - directly, inline, or through a group - allows *:* on *, or "
+      "grants a permission (or combination) that lets it give itself admin.",
+      "Anyone who compromises this identity (or a workload using the role) controls the whole account, either "
+      "directly or after one self-service privilege-escalation step.",
+      ["Review the policy and path named in the evidence (IAM Access Analyzer / last accessed data).",
+       "Replace admin / escalation-capable permissions with a scoped policy; scope iam:PassRole to specific roles.",
+       "Keep break-glass admin access behind MFA and SSO.",
+       "Note: permission boundaries, SCPs and policy conditions are not evaluated by this check."],
+      cli="aws iam list-attached-role-policies --role-name {resource}  # review, then detach the admin policy, e.g.\n"
+          "aws iam detach-role-policy --role-name {resource} --policy-arn arn:aws:iam::aws:policy/AdministratorAccess",
       refs=["CIS AWS 1.16"], asset="identity")
 def admin_policy(inv):
     acct = inv.get("account_id", "account")
-    for u in inv.get("iam_users", []):
-        if u.get("attached_policies") is None:
-            continue  # the policy read failed: unknown is neither admin nor scoped
-        adm = "AdministratorAccess" in u["attached_policies"]
-        yield CheckResult(f"arn:aws:iam::{acct}:user/{u['name']}", not adm,
-                          "AdministratorAccess attached" if adm else "Scoped permissions")
-    for r in inv.get("iam_roles", []):
-        if r.get("policies") is None:
-            continue
-        adm = "AdministratorAccess" in r["policies"]
-        yield CheckResult(f"arn:aws:iam::{acct}:role/{r['name']}", not adm,
-                          "AdministratorAccess attached" if adm else "Scoped permissions")
+    principals = [("user", u, "attached_policies") for u in inv.get("iam_users", [])] + \
+                 [("role", r, "policies") for r in inv.get("iam_roles", [])]
+    for kind, p, names_key in principals:
+        names = p.get(names_key)
+        docs = p.get("policy_documents")
+        result = analyze_iam(docs or [])
+        by_name = "AdministratorAccess" in (names or [])
+        admin = list(result["admin"])
+        if by_name and not any(x.get("policy") == "AdministratorAccess" for x in admin):
+            admin.append({"policy": "AdministratorAccess", "source": "managed (name match)", "conditional": False})
+        esc = result["escalation"]
+        bad = bool(admin or esc)
+        # "Scoped" needs every policy read: the collector marks principals whose documents could not all
+        # be read; older inventories (demo/IaC/snapshots without documents) fall back to the name list.
+        complete = p.get("policies_complete") if "policies_complete" in p else names is not None
+        if not bad and not complete:
+            continue  # unknown is neither admin nor scoped
+        if admin:
+            detail = "Full admin (*:* on *) via " + ", ".join(sorted({x["policy"] for x in admin}))
+        elif esc:
+            detail = "Privilege escalation possible: " + "; ".join(
+                f"{e['path']} via {', '.join(e['via'])}" for e in esc[:4]) + (" ..." if len(esc) > 4 else "")
+        else:
+            detail = "Scoped permissions" + (f" ({len(docs)} policy documents evaluated)" if docs else "")
+        if bad and (admin and all(x["conditional"] for x in admin) if admin else all(e["conditional"] for e in esc)):
+            detail += " [conditional: the granting statements carry Conditions that were not evaluated]"
+        yield CheckResult(f"arn:aws:iam::{acct}:{kind}/{p['name']}", not bad, detail,
+                          {"admin_via": admin, "escalation": esc, "documents_evaluated": len(docs or []),
+                           "groups": p.get("groups"),
+                           "not_evaluated": "permission boundaries, SCPs, session/resource policies, conditions"})
 
 
 @fixer("AWS-IAM-005")
 def _fix_admin(inv, rid):
     name = rid.split("/")[-1]
-    for coll, key in (("iam_users", "attached_policies"), ("iam_roles", "policies")):
+    kind_coll = ("iam_roles", "policies") if ":role/" in rid else ("iam_users", "attached_policies")
+    for coll, key in (kind_coll, ("iam_users", "attached_policies"), ("iam_roles", "policies")):
         it = find(inv.get(coll), "name", name)
-        if it and "AdministratorAccess" in (it.get(key) or []):
+        if not it:
+            continue
+        changed = False
+        if "AdministratorAccess" in (it.get(key) or []):
             it[key] = [p for p in it[key] if p != "AdministratorAccess"] + ["ReadOnlyAccess"]
+            changed = True
+        docs = it.get("policy_documents") or []
+        keep = [d for d in docs if not (analyze_iam([d])["admin"] or analyze_iam([d])["escalation"])]
+        if len(keep) != len(docs):
+            it["policy_documents"] = keep
+            changed = True
+        if changed:
             return True
     return False
 
@@ -336,14 +423,23 @@ def _fix_pp(inv, rid):
     return True
 
 
-@rule("AWS-EC2-001", "aws", "EC2", "Security group allows SSH/RDP from the internet", "critical",
-      "Administrative ports (22, 3389) must not be open to 0.0.0.0/0.",
+def _risky_hits(r):
+    if not open_to_world(r.get("cidr")) or str(r.get("protocol", "")).lower() in _ICMP:
+        return []  # ICMP "ports" are ICMP types/codes, not TCP/UDP ports
+    return [f"{name} ({p})" for p, name in RISKY_PORTS.items() if port_in(p, r.get("from", 0), r.get("to", 65535))]
+
+
+@rule("AWS-EC2-001", "aws", "EC2", "Security group allows SSH/RDP or database ports from the internet", "critical",
+      "Administrative ports (22, 3389, ...) and datastore/cache/search ports (3306, 5432, 1433, 1521, 27017, 6379, "
+      "9200, 5601, 11211, ...) must not be open to 0.0.0.0/0 or ::/0.",
       ["network"],
-      "An inbound rule allows TCP 22 or 3389 from 0.0.0.0/0 or ::/0.",
-      "Internet-wide scanners find open SSH/RDP within minutes and start brute-force and exploit attempts. This is "
-      "usually the first hop of a cloud attack path.",
-      ["Remove the 0.0.0.0/0 rule for port 22/3389.",
-       "Use AWS Systems Manager Session Manager (no inbound ports) or restrict to a VPN / office CIDR."],
+      "An inbound rule allows a remote-admin or database port (or a port range / all ports covering one) from "
+      "0.0.0.0/0 or ::/0.",
+      "Internet-wide scanners find open SSH/RDP and exposed databases (MongoDB, Redis, Elasticsearch, ...) within "
+      "minutes and start brute-force, ransom and exploit attempts. This is usually the first hop of a cloud attack path.",
+      ["Remove the 0.0.0.0/0 and ::/0 rules for the ports listed in the finding.",
+       "Use AWS Systems Manager Session Manager (no inbound ports) or restrict to a VPN / office CIDR; keep "
+       "databases in private subnets reachable only from the application tier."],
       terraform='''
 resource "aws_vpc_security_group_ingress_rule" "{resource}_ssh_vpn_only" {
   security_group_id = "{resource}"
@@ -352,19 +448,18 @@ resource "aws_vpc_security_group_ingress_rule" "{resource}_ssh_vpn_only" {
   to_port           = 22
   ip_protocol       = "tcp"
 }''',
-      cli="aws ec2 revoke-security-group-ingress --group-id {resource} --protocol tcp --port 22 --cidr 0.0.0.0/0",
+      cli="# revoke every world-open rule listed in the finding evidence, e.g. for SSH:\n"
+          "aws ec2 revoke-security-group-ingress --group-id {resource} --protocol tcp --port 22 --cidr 0.0.0.0/0",
       refs=["CIS AWS 5.2", "CIS AWS 5.3"], asset="network")
 def sg_admin_ports(inv):
     for sg in inv.get("security_groups", []):
         bad = []
         for r in sg.get("ingress", []):
-            if open_to_world(r.get("cidr")):
-                for p, name in ADMIN_PORTS.items():
-                    if port_in(p, r.get("from", 0), r.get("to", 65535)):
-                        bad.append(f"{name} ({p})")
+            bad.extend(_risky_hits(r))
+        bad = sorted(set(bad))
         yield CheckResult(f"{sg['id']}", not bad,
-                          f"Open to 0.0.0.0/0: {', '.join(sorted(set(bad)))}" if bad else "No admin ports open",
-                          {"ports": sorted(set(bad)), "name": sg.get("name")})
+                          f"Open to the internet: {', '.join(bad)}" if bad else "No admin/database ports open",
+                          {"ports": bad, "name": sg.get("name"), "region": sg.get("region")})
 
 
 @fixer("AWS-EC2-001")
@@ -373,9 +468,13 @@ def _fix_sg(inv, rid):
     if not sg:
         return False
     for r in sg.get("ingress", []):
-        if open_to_world(r.get("cidr")) and any(port_in(p, r.get("from", 0), r.get("to", 65535)) for p in ADMIN_PORTS):
+        if _risky_hits(r):
             r["cidr"] = "10.0.0.0/8"
     return True
+
+
+def _live_instances(inv):
+    return [i for i in inv.get("ec2_instances", []) if i.get("state") not in ("terminated", "shutting-down")]
 
 
 def _all_open(r):
@@ -432,7 +531,7 @@ resource "aws_instance" "{resource}" {
           "--http-endpoint enabled",
       refs=["CIS AWS 5.6"], asset="compute")
 def imdsv2(inv):
-    for i in inv.get("ec2_instances", []):
+    for i in _live_instances(inv):
         yield CheckResult(i["id"], bool(i.get("imdsv2_required")),
                           "IMDSv2 required" if i.get("imdsv2_required") else "IMDSv1 allowed", {"name": i.get("name")})
 
@@ -459,7 +558,7 @@ resource "aws_ebs_encryption_by_default" "this" {
       cli="aws ec2 enable-ebs-encryption-by-default",
       refs=["CIS AWS 2.2.1"])
 def ebs_enc(inv):
-    for i in inv.get("ec2_instances", []):
+    for i in _live_instances(inv):
         if "ebs_encrypted" in i and i["ebs_encrypted"] is not None:
             yield CheckResult(i["id"], bool(i["ebs_encrypted"]),
                               "Encrypted" if i["ebs_encrypted"] else "Root volume unencrypted", {"name": i.get("name")})
@@ -575,18 +674,34 @@ resource "aws_cloudtrail" "org_trail" {
       refs=["CIS AWS 3.1", "CIS AWS 3.2"])
 def cloudtrail(inv):
     ct = inv.get("cloudtrail")
-    if ct is not None and ct.get("enabled") is not None:
+    if ct is None:
+        return
+    rid = f"arn:aws:cloudtrail:{inv.get('region', 'us-east-1')}:{inv.get('account_id', 'account')}:trail"
+    trails = ct.get("trails")
+    if trails is not None:
+        # Live data: at least ONE trail must itself be multi-region AND logging AND log-file-validated;
+        # properties of different trails are never combined.
+        ok = ct.get("compliant_trail")
+        if ok is None:
+            return  # a potentially compliant trail's logging status could not be read: unknown
+        good = [t["name"] for t in trails if t["multi_region"] and t["logging"] and t["log_file_validation"]]
+        detail = (f"Compliant trail: {', '.join(good)}" if ok else
+                  ("No trails" if not trails else "No single trail is multi-region + logging + log-validated: " +
+                   "; ".join(f"{t['name']} (multi-region={t['multi_region']}, logging={t['logging']}, "
+                             f"validation={t['log_file_validation']})" for t in trails[:5])))
+        yield CheckResult(rid, bool(ok), detail, {"trails": trails})
+        return
+    if ct.get("enabled") is not None:  # aggregate data (demo / IaC / older snapshots)
         ok = ct.get("enabled") and ct.get("multi_region") and ct.get("log_file_validation")
         detail = "enabled={}, multi-region={}, log validation={}".format(
             ct.get("enabled"), ct.get("multi_region"), ct.get("log_file_validation"))
-        yield CheckResult(f"arn:aws:cloudtrail:{inv.get('region', 'us-east-1')}:{inv.get('account_id', 'account')}:trail",
-                          bool(ok), detail)
+        yield CheckResult(rid, bool(ok), detail)
 
 
 @fixer("AWS-LOG-001")
 def _fix_ct(inv, rid):
     inv["cloudtrail"] = {"enabled": True, "multi_region": True, "log_file_validation": True}
-    return True
+    return True  # (demo/snapshot inventories only: replaces per-trail data with a compliant aggregate)
 
 
 @rule("AWS-KMS-001", "aws", "KMS", "KMS customer managed key rotation disabled", "low",
@@ -629,12 +744,28 @@ resource "aws_guardduty_detector" "main" {
 }''',
       cli="aws guardduty create-detector --enable")
 def guardduty(inv):
-    if "guardduty_enabled" in inv:
-        yield CheckResult(f"arn:aws:guardduty:{inv.get('region', 'us-east-1')}:{inv.get('account_id', 'account')}",
+    acct = inv.get("account_id", "account")
+    regional = inv.get("guardduty")
+    if isinstance(regional, list):
+        # Live data, one entry per scanned region. A suspended detector (Status=DISABLED) is NOT enabled;
+        # a detector whose status could not be read is unknown and skipped.
+        for g in regional:
+            if g.get("enabled") is None:
+                continue
+            yield CheckResult(f"arn:aws:guardduty:{g.get('region')}:{acct}", bool(g["enabled"]),
+                              "Enabled" if g["enabled"] else
+                              ("Detector suspended (Status=DISABLED)" if g.get("detectors") else "No detector"),
+                              {"region": g.get("region"), "detectors": g.get("detectors"), "statuses": g.get("statuses")})
+        return
+    if "guardduty_enabled" in inv:  # demo / IaC / older snapshots
+        yield CheckResult(f"arn:aws:guardduty:{inv.get('region', 'us-east-1')}:{acct}",
                           bool(inv["guardduty_enabled"]), "Enabled" if inv["guardduty_enabled"] else "Disabled")
 
 
 @fixer("AWS-MON-001")
 def _fix_gd(inv, rid):
     inv["guardduty_enabled"] = True
+    for g in inv.get("guardduty") or []:
+        if isinstance(g, dict) and rid.startswith(f"arn:aws:guardduty:{g.get('region')}:"):
+            g["enabled"] = True
     return True
