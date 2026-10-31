@@ -209,7 +209,8 @@
           body: JSON.stringify({ message: q, history }) });
         const d = await r.json();
         const ans = r.ok ? d.answer : "Error: " + (d.error || r.status);
-        const foot = d.engine ? '<div class="foot">engine: ' + esc(d.engine) + (d.note ? " · " + esc(d.note) : "") + "</div>" : "";
+        const foot = d.engine ? '<div class="foot">engine: ' + esc(d.engine) + (d.note ? " · " + esc(d.note) : "") +
+          (d.disclaimer ? '<br>' + (d.ai_generated ? "AI-generated · " : "") + esc(d.disclaimer) : "") + "</div>" : "";
         history.push({ role: "user", content: q }, { role: "assistant", content: ans });
         await stream($(".bubble", pending), ans, foot);
       } catch (e) { $(".bubble", pending).textContent = "Network error, please try again."; }

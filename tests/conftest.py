@@ -21,6 +21,9 @@ def app(tmp_path):
 
 @pytest.fixture()
 def demo(app):
+    # v2.2: demo credentials/content are only shown in explicit demo mode (SHIELDIQ_SEED_DEMO=1), which is what
+    # seeding the demo workspace means; tests that use the demo workspace therefore run in demo mode.
+    app.config["SEED_DEMO"] = True
     from shieldiq.seed import seed_demo
     return seed_demo(with_fixes=False)
 

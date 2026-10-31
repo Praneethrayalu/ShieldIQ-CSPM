@@ -11,12 +11,26 @@ from collections import Counter
 import requests
 from flask import current_app
 
-from ..models import SEVERITY_WEIGHT, Finding
+from ..models import SEVERITY_WEIGHT, Finding, evidence_origin
 from ..rules import RULES, get_rule
 from . import attack_graph
 from .compliance import FRAMEWORKS, control_labels
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+# Copilot output is explanation, never evidence: it cannot create, confirm or close a finding.
+AI_DISCLAIMER = ("AI-generated explanation - not scanner evidence. Only findings produced by a scan are verified "
+                 "results; check any claim here against the finding's evidence before acting on it.")
+OFFLINE_DISCLAIMER = ("Built from ShieldIQ's rule knowledge base and your stored findings; it explains existing "
+                      "findings and is not new scanner evidence.")
+
+
+def _label(resp):
+    llm = str(resp.get("engine", "")).startswith("llm:")
+    resp["ai_generated"] = llm
+    resp["verified_evidence"] = False  # nothing the copilot says counts as a verified vulnerability
+    resp["disclaimer"] = AI_DISCLAIMER if llm else OFFLINE_DISCLAIMER
+    return resp
 
 
 def analyze_finding(finding: Finding) -> dict:
@@ -32,12 +46,14 @@ def analyze_finding(finding: Finding) -> dict:
         "root_cause": rule.root_cause, "impact": rule.impact, "blast_radius": blast,
         "attack_paths": impact, "priority_score": min(100, priority),
         "steps": [rule.render(s, finding.resource_id) for s in rule.steps],
-        "terraform": rule.render(rule.terraform, finding.resource_id),
-        "cli": rule.render(rule.cli, finding.resource_id),
+        "terraform": rule.render(rule.terraform, finding.resource_id, quote=rule.iac_quote),
+        "cli": rule.render(rule.cli, finding.resource_id, quote="shell"),
         "compliance": control_labels(rule),
         "auto_fix_available": bool(rule.fix) and finding.integration is not None and
         finding.integration.mode in ("demo", "snapshot", "upload"),
         "engine": "offline knowledge base",
+        "evidence_origin": evidence_origin(finding),
+        "disclaimer": OFFLINE_DISCLAIMER,
     }
 
 
@@ -131,7 +147,7 @@ def _offline_answer(q, org_id, compliance, score):
 def chat(question, org_id, compliance=None, score=None, history=None):
     question = (question or "").strip()[:2000]
     if not question:
-        return {"answer": "Ask me anything about your security posture.", "engine": "offline"}
+        return _label({"answer": "Ask me anything about your security posture.", "engine": "offline"})
     cfg = current_app.config
     if cfg.get("LLM_API_KEY"):
         summary, _, _ = context_summary(org_id, compliance, score)
@@ -148,8 +164,9 @@ def chat(question, org_id, compliance=None, score=None, history=None):
                               headers={"Authorization": f"Bearer {cfg['LLM_API_KEY']}"},
                               json={"model": cfg["LLM_MODEL"], "messages": msgs, "temperature": 0.2}, timeout=30)
             r.raise_for_status()
-            return {"answer": r.json()["choices"][0]["message"]["content"], "engine": f"llm:{cfg['LLM_MODEL']}"}
+            return _label({"answer": r.json()["choices"][0]["message"]["content"], "engine": f"llm:{cfg['LLM_MODEL']}"})
         except Exception as exc:  # graceful fallback
             ans = _offline_answer(question, org_id, compliance, score)
-            return {"answer": ans, "engine": "offline", "note": f"LLM unavailable ({exc.__class__.__name__}), used offline engine"}
-    return {"answer": _offline_answer(question, org_id, compliance, score), "engine": "offline"}
+            return _label({"answer": ans, "engine": "offline",
+                           "note": f"LLM unavailable ({exc.__class__.__name__}), used offline engine"})
+    return _label({"answer": _offline_answer(question, org_id, compliance, score), "engine": "offline"})

@@ -3,7 +3,9 @@
 {% from "brand.html" import lockup %}
 {% block title %}Sign in{% endblock %}
 {% block body %}
-{% set demo_prefill = request.args.get('demo') == '1' %}
+{# Demo credentials only exist on the page when the operator opted in to demo mode (SHIELDIQ_SEED_DEMO=1). #}
+{% set demo_mode = config.get('SEED_DEMO') %}
+{% set demo_prefill = demo_mode and request.args.get('demo') == '1' %}
 <div class="auth x-auth-wrap">
   <section class="auth-form">
     <div class="auth-top">
@@ -21,6 +23,7 @@
         <div class="row between" style="margin:4px 0 20px"><label class="checkbox" style="margin:0"><input type="checkbox" name="remember"> Remember me</label></div>
         <button class="btn primary block lg" type="submit" {{ 'autofocus' if demo_prefill }}>Sign in</button>
       </form>
+      {% if demo_mode %}
       <div class="or-line">or explore the demo</div>
       <div class="demo-box {{ 'filled' if demo_prefill }}">
         <div style="min-width:0">
@@ -30,6 +33,7 @@
         <button class="btn sm" type="button" data-fill-demo data-email="demo@shieldiq.local" data-password="ShieldIQ@2026">Use</button>
       </div>
       <p class="hint" style="margin-top:10px">Also try analyst@ and viewer@shieldiq.local (same password) to see role-based access.</p>
+      {% endif %}
       <p class="muted small" style="margin-top:22px">New here? <a class="link" href="{{ url_for('auth.register') }}">Create an organization</a></p>
     </div>
     <div class="auth-bottom"><span>ShieldIQ · portfolio project</span><span>Runs locally · your data stays on your machine</span></div>

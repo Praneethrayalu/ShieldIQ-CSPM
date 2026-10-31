@@ -138,8 +138,12 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Open **http://127.0.0.1:5000**. Visitors see the landing page; **Try live demo** signs you straight into the sample
-workspace. Or sign in yourself with any demo account:
+Open **http://127.0.0.1:5000**. Visitors see the landing page.
+
+**Demo mode is off by default (v2.2).** To get the fictional sample workspace and the demo logins below, start with
+`SHIELDIQ_SEED_DEMO=1` (in `.env` or the environment) - local / portfolio use only, never on an internet-facing
+deployment. In demo mode **Try live demo** signs you straight into the sample workspace, or sign in with any demo
+account:
 
 | Role | Email | Password |
 |---|---|---|
@@ -147,8 +151,8 @@ workspace. Or sign in yourself with any demo account:
 | Analyst | `analyst@shieldiq.local` | `ShieldIQ@2026` |
 | Viewer (read-only) | `viewer@shieldiq.local` | `ShieldIQ@2026` |
 
-On the first run ShieldIQ creates `instance/` with a SQLite database and its own secret and encryption keys, then
-scans the sample environments. To start fresh, stop the app and delete the `instance/` folder.
+On the first run ShieldIQ creates `instance/` with a SQLite database and its own secret and encryption keys (and,
+in demo mode, scans the sample environments). To start fresh, stop the app and delete the `instance/` folder.
 You can also **register** your own organization, which starts empty.
 
 ### A two-minute tour
@@ -170,10 +174,14 @@ Copy `.env.example` to `.env`. Every setting is optional:
 | `GITHUB_TOKEN` | Higher GitHub rate limits; default token for fix PRs |
 | `SHIELDIQ_SLACK_WEBHOOK_URL`, `SHIELDIQ_SMTP_*` | Alert delivery to Slack / email |
 | `DATABASE_URL` | Use Postgres/MySQL instead of SQLite (install its driver, e.g. `psycopg2-binary`) |
-| `SHIELDIQ_SEED_DEMO=0` | Start without the demo organization |
+| `SHIELDIQ_SEED_DEMO=1` | Demo mode: create the demo organization and show the demo logins (off by default) |
+| `SHIELDIQ_ALLOWED_AWS_PROFILES=a,b` | AWS CLI profiles live integrations may pick (empty/unset = profiles disabled) |
 
 **Live AWS scanning** needs boto3: `pip install -r requirements-cloud.txt`. Then add an AWS integration in *Live* mode
-with a read-only IAM user (the AWS-managed `SecurityAudit` policy is enough) or a local AWS CLI profile.
+with a read-only IAM user (the AWS-managed `SecurityAudit` policy is enough). AWS CLI profiles on the server can only
+be used if the operator lists them in `SHIELDIQ_ALLOWED_AWS_PROFILES` (so tenants can never borrow the server's own
+credentials). Every enabled region is scanned by default; a comma-separated region list can be set per integration.
+See `CHANGELOG.md` for what v2.2.0 changed in detection.
 
 ## Tests
 
@@ -258,7 +266,8 @@ tests/                     pytest suite
 - The built-in Flask server is for local use. For a real deployment, use a WSGI server (e.g. gunicorn/waitress) behind
   HTTPS with `SHIELDIQ_SECURE_COOKIES=1`.
 - Compliance mapping is simplified and educational. It is not an audit tool.
-- Demo sign-in is public by design - set `SHIELDIQ_SEED_DEMO=0` before showing it to anyone you do not trust.
+- Demo sign-in (only in demo mode, `SHIELDIQ_SEED_DEMO=1`) uses public credentials. If a database was ever seeded
+  in demo mode, delete or re-password the three demo accounts before exposing it.
   Per-network throttles can be tuned with `SHIELDIQ_LOGIN_IP_MAX_ATTEMPTS` and `SHIELDIQ_REGISTER_IP_MAX_ATTEMPTS`.
 - If ShieldIQ runs behind a reverse proxy, set `SHIELDIQ_TRUST_PROXY=1` so the audit log records the real client IP
   from `X-Forwarded-For`. By default the header is ignored (it is trivial to spoof).

@@ -1,11 +1,12 @@
 import json
+import re
 from pathlib import Path
 
 from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redirect, render_template, request,
                    send_file, url_for)
 from flask_login import current_user, login_required
 
-from .collectors import PROVIDERS, CollectorError, demo_inventory, validate_snapshot
+from .collectors import PROVIDERS, CollectorError, aws_live, demo_inventory, validate_snapshot
 from .collectors.iac import parse_any
 from .extensions import db
 from .models import (FINDING_STATUSES, ROLES, SEVERITIES, Alert, ApiToken, AuditLog, Finding, Integration,
@@ -59,6 +60,12 @@ def inject():
 
 DEMO_EMAIL = "demo@shieldiq.local"
 DEMO_PASSWORD = "ShieldIQ@2026"
+
+
+def _demo_mode():
+    """Demo credentials / demo content are only ever shown when the operator explicitly opted in
+    (SHIELDIQ_SEED_DEMO=1). A deployment that merely has a demo account in its database shows nothing."""
+    return bool(current_app.config.get("SEED_DEMO"))
 
 
 SAMPLE_PATH = {  # shown only when the demo workspace is absent or has no open paths (e.g. after every fix was applied)
@@ -150,7 +157,7 @@ def _landing_context():
     from .rules.code import DETECTORS
     providers = [k for k in PROVIDERS if k != "code"]
     demo_user = User.query.filter_by(email=DEMO_EMAIL).first()
-    demo_ok = bool(demo_user and demo_user.is_active)
+    demo_ok = _demo_mode() and bool(demo_user and demo_user.is_active)
     per_provider = {}
     for r in RULES.values():
         per_provider[r.provider] = per_provider.get(r.provider, 0) + 1
@@ -186,7 +193,8 @@ def guides():
     providers = {k: PROVIDERS[k] for k in GUIDES}
     return render_template("guides.html", guides=GUIDES, after=AFTER, providers=providers,
                            demo={"email": DEMO_EMAIL, "password": DEMO_PASSWORD}
-                           if (lambda u: bool(u and u.is_active))(User.query.filter_by(email=DEMO_EMAIL).first()) else None)
+                           if _demo_mode() and (lambda u: bool(u and u.is_active))(
+                               User.query.filter_by(email=DEMO_EMAIL).first()) else None)
 
 
 @bp.route("/dashboard")
@@ -343,7 +351,8 @@ def integrations():
     counts = {i.id: Finding.query.filter(Finding.integration_id == i.id, Finding.status.in_(["open", "in_progress"])).count()
               for i in items}
     template_urls = {k: url_for("views.snapshot_template", provider=k) for k in PROVIDERS if k != "code"}
-    return render_template("integrations.html", items=items, counts=counts, template_urls=template_urls)
+    return render_template("integrations.html", items=items, counts=counts, template_urls=template_urls,
+                           aws_profiles=sorted(aws_live.allowed_profiles(current_app.config)))
 
 
 @bp.route("/integrations/new", methods=["POST"])
@@ -373,10 +382,27 @@ def integration_new():
         elif mode == "live" and provider == "aws":
             ak, sk = (f.get("access_key_id") or "").strip(), (f.get("secret_access_key") or "").strip()
             profile = (f.get("profile") or "").strip()
-            if not (ak and sk) and not profile:
-                raise CollectorError("Enter an access key + secret (read-only SecurityAudit user) or a local AWS CLI profile")
+            allowed = aws_live.allowed_profiles(current_app.config)
+            if ak and sk:
+                profile = ""  # an explicit key always wins; never store a profile beside it
+            elif profile:
+                # Only profiles the operator explicitly allowed: otherwise any tenant could scan with the
+                # server's own ~/.aws credentials (or probe which profiles exist).
+                if profile not in allowed:
+                    raise CollectorError("That AWS CLI profile is not allowed on this server. Use an access key for a "
+                                         "read-only SecurityAudit user.")
+            else:
+                raise CollectorError("Enter an access key + secret (read-only SecurityAudit user)"
+                                     + (" or one of the allowed AWS CLI profiles" if allowed else ""))
             integ.secret_enc = encrypt({"access_key_id": ak, "secret_access_key": sk, "profile": profile})
-            integ.config = {"region": (f.get("region") or "us-east-1").strip()[:30]}
+            region = (f.get("region") or "us-east-1").strip()[:30]
+            regions = [r.strip() for r in (f.get("regions") or "").split(",") if r.strip()]
+            bad = [r for r in [region] + regions if not re.fullmatch(r"^[a-z]{2}(-gov|-iso[a-z]?)?-[a-z]+-\d{1,2}$", r)]
+            if bad:
+                raise CollectorError(f"Not an AWS region name: {bad[0][:30]}")
+            integ.config = {"region": region}
+            if regions:
+                integ.config["regions"] = regions[:40]  # blank = every enabled region (DescribeRegions)
         elif mode == "live" and provider == "github":
             target = (f.get("target") or "").strip()
             if not target:

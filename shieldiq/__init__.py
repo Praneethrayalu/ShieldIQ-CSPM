@@ -8,7 +8,7 @@ from flask import Flask, jsonify, render_template, request
 from .config import Config
 from .extensions import csrf, db, login_manager
 
-__version__ = "2.1.4"
+__version__ = "2.2.0"
 
 
 def create_app(config_class=Config, **overrides):
@@ -29,7 +29,15 @@ def create_app(config_class=Config, **overrides):
 
     @login_manager.user_loader
     def load_user(uid):
-        return db.session.get(User, int(uid))
+        # Flask-Login does not re-check is_active when it restores a session, so a disabled user's existing
+        # session (or remember-me cookie) would keep working. Returning None ends it on the next request.
+        try:
+            user = db.session.get(User, int(uid))
+        except (TypeError, ValueError):
+            return None
+        if user is None or not user.is_active:
+            return None
+        return user
 
     from .api import bp as api_bp
     from .auth import bp as auth_bp

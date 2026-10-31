@@ -164,6 +164,24 @@ class ScanRun(db.Model):
     )
 
 
+EVIDENCE_ORIGINS = {
+    "live": ("live-scan", True, "Detected by a live read-only scan of the connected account"),
+    "demo": ("demo-data", False, "DEMO DATA - fictional sample inventory, not a real detection"),
+    "snapshot": ("snapshot", False, "From a stored/uploaded inventory snapshot - not verified against the live account"),
+    "upload": ("uploaded-file", False, "From an uploaded file (IaC/config) - a configuration finding, not verified "
+                                       "against a running environment"),
+}
+
+
+def evidence_origin(finding):
+    """Where a finding's evidence came from, and whether ShieldIQ itself verified it against a live source."""
+    mode = finding.source
+    if finding.integration is not None and mode not in EVIDENCE_ORIGINS:
+        mode = finding.integration.mode
+    key, verified, label = EVIDENCE_ORIGINS.get(mode, ("unknown", False, "Origin unknown - not verified scanner evidence"))
+    return {"origin": key, "verified_by_scanner": verified, "label": label}
+
+
 class Finding(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     org_id = db.Column(db.Integer, db.ForeignKey("organization.id"), nullable=False, index=True)
@@ -201,7 +219,12 @@ class Finding(db.Model):
             "last_seen": self.last_seen.isoformat() + "Z" if self.last_seen else None,
             "resolved_at": self.resolved_at.isoformat() + "Z" if self.resolved_at else None,
             "evidence": self.evidence or {},
+            "evidence_origin": evidence_origin(self),
         }
+
+    @property
+    def origin(self):
+        return evidence_origin(self)
 
 
 class Alert(db.Model):

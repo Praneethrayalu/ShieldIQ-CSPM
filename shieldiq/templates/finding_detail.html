@@ -8,6 +8,8 @@
     <div class="row wrap" style="gap:var(--s-3)">{{ sev(f.severity) }} {{ status(f.status) }} <span class="tag">{{ f.rule_id }}</span> <span class="tag">{{ f.service }}</span></div>
     <h1 style="margin-top:var(--s-3)">{{ f.title }}</h1>
     <p class="row" style="gap:var(--s-2)">{{ prov(f.provider) }}<span class="mono small" style="word-break:break-all">{{ f.resource_id }}</span>{% if f.integration %}<span class="faint small">· {{ f.integration.name }}</span>{% endif %}</p>
+    {% set o = f.origin %}
+    <p class="small" data-evidence-origin="{{ o.origin }}"><span class="tag">{{ 'Verified by live scan' if o.verified_by_scanner else 'Not verified scanner evidence' }}</span> <span class="muted">{{ o.label }}</span></p>
   </div>
   <div class="head-figs">
     <div><span class="eyebrow">Priority</span><b class="figure {{ 'c-critical' if a.priority_score >= 80 }}">{{ a.priority_score }}</b><span class="tiny faint mono">/100</span></div>
@@ -18,6 +20,7 @@
 <div class="grid g-main">
   <div class="card">
     <div class="card-head" style="margin-bottom:var(--s-2)"><h3>Analysis</h3><span class="tag">engine: {{ a.engine }}</span></div>
+    <p class="tiny faint" data-copilot-disclaimer>{{ a.disclaimer }}</p>
     <div class="tabs" data-tabs>
       <button class="tab active" data-tab="ov">Overview</button>
       <button class="tab" data-tab="fix">Fix steps</button>

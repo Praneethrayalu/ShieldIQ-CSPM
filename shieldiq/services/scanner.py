@@ -28,7 +28,19 @@ def collect_inventory(integ: Integration) -> dict:
     if integ.mode == "live":
         secret = decrypt(integ.secret_enc, as_json=True) or {}
         if integ.provider == "aws":
-            return aws_live.collect({**secret, "region": (integ.config or {}).get("region")})
+            from flask import current_app
+            cfg = integ.config or {}
+            creds = {**secret, "region": cfg.get("region"), "regions": cfg.get("regions")}
+            if not creds.get("access_key_id"):
+                # re-checked at every scan: a profile stored before it was disallowed stops working
+                prof = creds.get("profile")
+                if not prof or prof not in aws_live.allowed_profiles(current_app.config):
+                    raise CollectorError("This integration has no access key and its AWS CLI profile is not allowed "
+                                         "on this server (SHIELDIQ_ALLOWED_AWS_PROFILES). Reconnect with a read-only "
+                                         "access key.")
+                return aws_live.collect(creds, session=aws_live._session(
+                    creds, profiles=aws_live.allowed_profiles(current_app.config)))
+            return aws_live.collect(creds)
         if integ.provider == "github":
             from flask import current_app
             token = secret.get("token") or current_app.config.get("GITHUB_TOKEN") or None
@@ -109,8 +121,12 @@ def scan_integration(integ: Integration, user_email="system", deliver_alerts=Tru
             call, _, cls = str(e).partition(": ")
             errs.append({"call": call, "code": cls or None, "status": None, "kind": "error"})
     evaluations = evaluate(integ.provider, inv)
-    stats, failing, evaluated = {}, {}, {}
+    stats, failing, evaluated, rule_errors = {}, {}, {}, {}
     for ev in evaluations:
+        if ev.error:
+            rule_errors[ev.rule.id] = ev.error
+            stats[ev.rule.id] = {"total": 0, "failed": 0, "error": ev.error}
+            continue
         stats[ev.rule.id] = {"total": len(ev.results), "failed": len(ev.failed)}
         evaluated[ev.rule.id] = {res.resource_id for res in ev.results}
         for res in ev.failed:
@@ -137,15 +153,27 @@ def scan_integration(integ: Integration, user_email="system", deliver_alerts=Tru
     unverified = 0
     for fp, f in existing.items():
         if fp not in failing and f.status in ("open", "in_progress", "accepted"):
-            # A partial scan must never reclassify "could not read" as "fixed": only resolve a finding
-            # when this scan actually evaluated that resource for that rule. Otherwise keep it open
-            # and say why - the issue is unverified, not gone.
-            if errs and f.resource_id not in evaluated.get(f.rule_id, set()):
+            # Only resolve what this scan actually proved fixed:
+            #  - the rule crashed            -> nothing was evaluated: keep the finding, mark it unverified
+            #  - the resource was evaluated  -> it passed this time: resolve
+            #  - the resource was not seen   -> resolve as "no longer present" ONLY if the whole scan read every
+            #                                   source completely (no read errors, no rule errors); otherwise the
+            #                                   absence may just be data we could not read: keep it, unverified
+            if f.rule_id in rule_errors:
+                f.status_note = "Unverified: this check failed to run in the latest scan (rule error)"
+                unverified += 1
+                continue
+            if f.resource_id in evaluated.get(f.rule_id, set()):
+                f.status, f.resolved_at = "resolved", now
+                f.status_note = "Auto-resolved: passed in the latest scan"
+                resolved += 1
+                continue
+            if errs or rule_errors or f.rule_id not in evaluated:
                 f.status_note = "Unverified: the latest scan could not evaluate this check (partial coverage)"
                 unverified += 1
                 continue
             f.status, f.resolved_at = "resolved", now
-            f.status_note = "Auto-resolved: passed in the latest scan"
+            f.status_note = "Auto-resolved: resource no longer present in a complete scan"
             resolved += 1
     db.session.flush()
 
@@ -162,6 +190,11 @@ def scan_integration(integ: Integration, user_email="system", deliver_alerts=Tru
         coverage_note = (f"Partial coverage: {len(errs)} read(s) could not be completed "
                          f"({denied} access-denied): {shown}{'; ...' if len(errs) > 5 else ''}. "
                          f"Affected checks were not evaluated; results and score cover evaluated checks only.")
+    if rule_errors:
+        shown = "; ".join(f"{rid} ({msg[:80]})" for rid, msg in list(rule_errors.items())[:5])
+        coverage_note = ((coverage_note + " ") if coverage_note else "") + (
+            f"Rule errors: {len(rule_errors)} check(s) crashed and were not evaluated: {shown}"
+            f"{'; ...' if len(rule_errors) > 5 else ''}. Their existing findings were left open (unverified).")
     if coverage_note:
         run.status = "partial"
         run.error = coverage_note

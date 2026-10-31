@@ -13,6 +13,7 @@ from flask import current_app
 from ..extensions import db
 from ..models import Remediation, utcnow
 from ..rules import get_rule
+from ..rules.engine import comment_safe
 from ..security import decrypt
 from . import audit
 from .alerts import raise_alert
@@ -66,13 +67,19 @@ def integ_org(finding):
 
 
 def fix_script(finding):
+    """Generated fix script + IaC snippet. Every scanned/uploaded value interpolated into them is quoted
+    (shlex.quote for the shell script, string-escaped for Terraform) and comment lines are flattened, so a
+    hostile resource name (e.g. `x;touch PWNED;#` or one containing a newline) cannot inject commands."""
     rule = get_rule(finding.rule_id)
     rid = finding.resource_id
-    sh = ["#!/usr/bin/env bash", f"# ShieldIQ fix for finding #{finding.id}: {rule.title}", f"# Resource: {rid}",
+    safe_rid = comment_safe(rid)
+    sh = ["#!/usr/bin/env bash", f"# ShieldIQ fix for finding #{finding.id}: {comment_safe(rule.title)}",
+          f"# Resource: {safe_rid}",
           "# Review before running. Requires the provider CLI and permissions to change this resource.",
-          "set -euo pipefail", "", rule.render(rule.cli, rid), "", "echo 'Done. Re-scan in ShieldIQ to verify.'", ""]
-    tf = f"# ShieldIQ fix for finding #{finding.id}: {rule.title}\n# Resource: {rid}\n{rule.render(rule.terraform, rid).lstrip()}\n" \
-        if rule.terraform else None
+          "set -euo pipefail", "", rule.render(rule.cli, rid, quote="shell"), "",
+          "echo 'Done. Re-scan in ShieldIQ to verify.'", ""]
+    tf = f"# ShieldIQ fix for finding #{finding.id}: {comment_safe(rule.title)}\n# Resource: {safe_rid}\n" \
+         f"{rule.render(rule.terraform, rid, quote=rule.iac_quote).lstrip()}\n" if rule.terraform else None
     return "\n".join(sh), tf
 
 
@@ -87,7 +94,8 @@ def open_github_pr(finding, org, user_email, repo=None, token=None, base="main",
     if not token:
         raise RemediationError("A GitHub token with 'contents' and 'pull requests' write access is needed (Settings)")
     _, tf = fix_script(finding)
-    content = tf or f"# {rule.title}\n# {finding.resource_id}\n\n" + rule.render(rule.cli, finding.resource_id)
+    content = tf or f"# {comment_safe(rule.title)}\n# {comment_safe(finding.resource_id)}\n\n" + \
+        rule.render(rule.cli, finding.resource_id, quote="shell")
     s = session or requests.Session()
     h = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "User-Agent": "ShieldIQ"}
     api = f"https://api.github.com/repos/{repo}"

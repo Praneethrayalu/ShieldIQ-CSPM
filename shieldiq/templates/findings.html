@@ -50,7 +50,7 @@
         {% if current_user.can('triage') %}<td><input type="checkbox" name="ids" value="{{ f.id }}" data-row-check aria-label="Select finding #{{ f.id }}"></td>{% endif %}
         <td>{{ sev(f.severity) }}</td>
         <td class="title-cell"><a href="{{ url_for('views.finding_detail', fid=f.id) }}">{{ f.title }}</a><span class="res" title="{{ f.resource_id }}">{{ f.resource_id }}</span><div class="tiny faint"><span class="mono">#{{ f.id }} · {{ f.rule_id }}</span> · {{ f.detail }}</div></td>
-        <td><div class="row">{{ prov(f.provider) }}<span class="small muted ellipsis" style="max-width:170px">{{ f.integration.name if f.integration else '—' }}</span></div></td>
+        <td><div class="row">{{ prov(f.provider) }}<span class="small muted ellipsis" style="max-width:170px">{{ f.integration.name if f.integration else '—' }}</span></div>{% set o = f.origin %}{% if not o.verified_by_scanner %}<span class="tag tiny" data-evidence-origin="{{ o.origin }}" title="{{ o.label }}">{{ 'DEMO DATA' if o.origin == 'demo-data' else 'not live-verified' }}</span>{% endif %}</td>
         <td>{{ status(f.status) }}</td>
         <td class="num tiny muted">{{ f.first_seen|timeago }}</td>
       </tr>

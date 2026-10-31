@@ -6,6 +6,7 @@
   <div><div class="eyebrow">Analysis</div><h1>Security Copilot</h1><p>Ask about your posture in plain words. Answers are built from your own findings, compliance scores and attack paths.</p></div>
   <span class="tag">engine: {{ 'LLM, with offline fallback' if llm else 'offline knowledge base, no API key' }}</span>
 </div>
+<p class="small muted" data-copilot-disclaimer>Copilot answers explain existing findings{{ ' and may be AI-generated' if llm }}. They are <b>not scanner evidence</b> and never create, confirm or resolve a finding - only scan results are verified detections.</p>
 <div class="card chat">
   <div class="messages" id="messages">
     <div class="msg"><div class="who">Copilot</div><div class="bubble">Hi {{ current_user.full_name.split()[0] }}. I can prioritise fixes, explain any finding, walk through attack paths, or summarise a compliance framework. Pick a question below or ask your own.</div></div>

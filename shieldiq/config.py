@@ -68,7 +68,11 @@ class Config:
     SMTP_PASSWORD = os.getenv("SHIELDIQ_SMTP_PASSWORD", "")
     SMTP_FROM = os.getenv("SHIELDIQ_SMTP_FROM", "")
 
-    SEED_DEMO = os.getenv("SHIELDIQ_SEED_DEMO", "1") == "1"
+    # Demo workspace (fictional data + well-known demo logins) is OFF unless explicitly opted in.
+    SEED_DEMO = os.getenv("SHIELDIQ_SEED_DEMO", "0") == "1"
+    # AWS CLI profiles an integration may use (comma-separated). Empty = profile field disabled, so tenants
+    # can never scan with the server's own ~/.aws credentials.
+    ALLOWED_AWS_PROFILES = [p.strip() for p in os.getenv("SHIELDIQ_ALLOWED_AWS_PROFILES", "").split(",") if p.strip()]
 
     @classmethod
     def finalize(cls, app):

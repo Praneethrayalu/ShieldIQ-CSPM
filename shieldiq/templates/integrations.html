@@ -62,8 +62,12 @@
             <div class="field"><label>Secret access key</label><input type="password" name="secret_access_key" autocomplete="off"></div>
           </div>
           <div class="grid g-2" style="gap:12px">
-            <div class="field"><label>…or local AWS CLI profile</label><input type="text" name="profile" placeholder="default"></div>
-            <div class="field"><label>Region</label><input type="text" name="region" value="us-east-1"></div>
+            {% if aws_profiles %}
+            {# Only profiles the operator explicitly allowed (SHIELDIQ_ALLOWED_AWS_PROFILES); never free text. #}
+            <div class="field"><label>…or an allowed AWS CLI profile</label><select name="profile"><option value="">(use the access key above)</option>{% for p in aws_profiles %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></div>
+            {% endif %}
+            <div class="field"><label>Home region</label><input type="text" name="region" value="us-east-1"></div>
+            <div class="field"><label>Regions to scan</label><input type="text" name="regions" placeholder="blank = every enabled region"></div>
           </div>
           <div class="hint">Use a user with only the AWS-managed <b>SecurityAudit</b> policy. Keys are encrypted at rest (Fernet). Requires <code>pip install -r requirements-cloud.txt</code>.</div>
         </div>

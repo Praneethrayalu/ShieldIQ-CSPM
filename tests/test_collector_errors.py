@@ -36,7 +36,7 @@ class FakeSession:
     def __init__(self, behaviors):
         self.behaviors = behaviors
 
-    def client(self, name):
+    def client(self, name, region_name=None):  # boto3's Session.client signature (v2.2 scans every region)
         return FakeClient(self.behaviors.get(name, {}))
 
 
@@ -53,11 +53,16 @@ def base_behaviors():
                 "list_users": {"Users": []}, "list_roles": {"Roles": []}},
         "s3": {"list_buckets": {"Buckets": []}},
         "ec2": {"describe_security_groups": {"SecurityGroups": []}, "describe_volumes": {"Volumes": []},
-                "describe_instances": {"Reservations": []}},
+                "describe_instances": {"Reservations": []},
+                # v2.2: regions are discovered (DescribeRegions); this account has one enabled region
+                "describe_regions": {"Regions": [{"RegionName": "us-east-1", "OptInStatus": "opt-in-not-required"}]}},
+        # v2.2: account-level S3 Block Public Access is read; "not configured" is a legitimate state
+        "s3control": {"get_public_access_block": AwsErr("NoSuchPublicAccessBlockConfiguration", 404)},
         "rds": {"describe_db_instances": {"DBInstances": []}},
         "cloudtrail": {"describe_trails": {"trailList": []}},
         "kms": {"list_keys": {"Keys": []}},
-        "guardduty": {"list_detectors": {"DetectorIds": ["synthetic-detector"]}},
+        "guardduty": {"list_detectors": {"DetectorIds": ["synthetic-detector"]},
+                      "get_detector": {"Status": "ENABLED"}},  # v2.2: detector status is read
     }
 
 
