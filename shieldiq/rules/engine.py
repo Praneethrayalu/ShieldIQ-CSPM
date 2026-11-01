@@ -16,9 +16,13 @@ RULES: Dict[str, "Rule"] = {}
 @dataclass
 class CheckResult:
     resource_id: str
-    passed: bool
+    passed: Optional[bool]  # True = Secure, False = Finding, None = Unknown / Incomplete (v2.3)
     detail: str = ""
     evidence: dict = field(default_factory=dict)
+
+    @property
+    def state(self):
+        return "secure" if self.passed is True else "finding" if self.passed is False else "unknown"
 
 
 @dataclass
@@ -123,19 +127,30 @@ class Evaluation:
 
     @property
     def failed(self):
-        return [r for r in self.results if not r.passed]
+        return [r for r in self.results if r.passed is False]
+
+    # v2.3: resources the rule looked at but could not decide (missing data): Unknown / Incomplete, never a pass.
+    # Kept apart from `results` so every consumer of `results` keeps seeing only decided (Secure/Finding) checks.
+    unknown: List[CheckResult] = field(default_factory=list)
+
+    @property
+    def decided(self):
+        return [r for r in self.results if r.passed is not None]
 
 
 def evaluate(provider: str, inventory: dict) -> List[Evaluation]:
     out = []
     for r in rules_for(provider):
+        unknown = []
         try:
             results, error = list(r.check(inventory or {})), None
+            unknown = [x for x in results if x.passed is None]
+            results = [x for x in results if x.passed is not None]
         except Exception as exc:  # a broken rule must never kill a scan...
             # ...but it must not count as "passed" either: no results, and the error is reported so the
             # scan is marked partial and this rule's existing findings are left untouched (not resolved).
             results, error = [], f"{exc.__class__.__name__}: {str(exc)[:200]}"
-        out.append(Evaluation(rule=r, results=results, error=error))
+        out.append(Evaluation(rule=r, results=results, error=error, unknown=unknown))
     return out
 
 

@@ -121,14 +121,17 @@ def scan_integration(integ: Integration, user_email="system", deliver_alerts=Tru
             call, _, cls = str(e).partition(": ")
             errs.append({"call": call, "code": cls or None, "status": None, "kind": "error"})
     evaluations = evaluate(integ.provider, inv)
-    stats, failing, evaluated, rule_errors = {}, {}, {}, {}
+    stats, failing, evaluated, rule_errors, unknown_results = {}, {}, {}, {}, {}
     for ev in evaluations:
         if ev.error:
             rule_errors[ev.rule.id] = ev.error
             stats[ev.rule.id] = {"total": 0, "failed": 0, "error": ev.error}
             continue
-        stats[ev.rule.id] = {"total": len(ev.results), "failed": len(ev.failed)}
-        evaluated[ev.rule.id] = {res.resource_id for res in ev.results}
+        stats[ev.rule.id] = {"total": len(ev.decided), "failed": len(ev.failed)}
+        if ev.unknown:  # v2.3: Unknown / Incomplete is its own state - not counted as passed, never resolves
+            stats[ev.rule.id]["unknown"] = len(ev.unknown)
+            unknown_results[ev.rule.id] = {res.resource_id: res.detail for res in ev.unknown}
+        evaluated[ev.rule.id] = {res.resource_id for res in ev.decided}
         for res in ev.failed:
             failing[fingerprint(integ.id, ev.rule.id, res.resource_id)] = (ev.rule, res)
     integ.check_stats = stats
@@ -161,6 +164,11 @@ def scan_integration(integ: Integration, user_email="system", deliver_alerts=Tru
             #                                   absence may just be data we could not read: keep it, unverified
             if f.rule_id in rule_errors:
                 f.status_note = "Unverified: this check failed to run in the latest scan (rule error)"
+                unverified += 1
+                continue
+            if f.resource_id in unknown_results.get(f.rule_id, {}):
+                f.status_note = ("Unverified: the latest scan could not decide this check (unknown / incomplete "
+                                 "data): " + str(unknown_results[f.rule_id][f.resource_id])[:300])
                 unverified += 1
                 continue
             if f.resource_id in evaluated.get(f.rule_id, set()):

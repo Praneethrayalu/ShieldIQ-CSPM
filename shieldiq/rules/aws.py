@@ -346,6 +346,21 @@ def admin_policy(inv):
     acct = inv.get("account_id", "account")
     principals = [("user", u, "attached_policies") for u in inv.get("iam_users", [])] + \
                  [("role", r, "policies") for r in inv.get("iam_roles", [])]
+    if isinstance(inv.get("iam"), dict) and inv["iam"].get("users") is not None:
+        # v2.3: the collector's authorization model (GetAccountAuthorizationDetails) is the richer source
+        from .iam_effective import analyzer_for
+        model = analyzer_for(inv).m
+        principals = []
+        for pr in model.principals.values():
+            if pr.service_linked:
+                continue
+            docs = [{"name": r.name, "source": (("managed:" + r.arn) if r.arn and not r.via.startswith("group:") else
+                                                ("group-managed:" + r.via[6:] + ":" + r.arn) if r.arn else
+                                                ("group-inline:" + r.via[6:]) if r.via.startswith("group:") else "inline"),
+                     "document": r.document} for r in pr.identity if r.document is not None]
+            names = [r.name for r in pr.identity if r.kind in ("managed", "aws-managed")]
+            principals.append((pr.kind, {"name": pr.name, "arn": pr.arn, "names": names, "policy_documents": docs,
+                                         "policies_complete": pr.identity_complete, "groups": pr.groups}, "names"))
     for kind, p, names_key in principals:
         names = p.get(names_key)
         docs = p.get("policy_documents")
@@ -355,12 +370,48 @@ def admin_policy(inv):
         if by_name and not any(x.get("policy") == "AdministratorAccess" for x in admin):
             admin.append({"policy": "AdministratorAccess", "source": "managed (name match)", "conditional": False})
         esc = result["escalation"]
+        # v2.3: account for permissions boundaries, SCPs and explicit denies (shieldiq/iam). An item is dropped only
+        # when a layer certainly blocks it everywhere; when a layer is unknown the item stays, labelled unconfirmed.
+        restricted = []
+        try:
+            from .iam_effective import restriction
+            probe = ["shieldiq-probe:AnyAction", "iam:AttachUserPolicy", "iam:PassRole", "s3:GetObject"]
+            wanted = set(probe) | {a for e in esc for a in e["path"].replace(" + ", "|").split("|")}
+            rinfo = restriction(inv, kind, p["name"], sorted(wanted))
+            blocked = dict(rinfo["blocked"])
+            if admin and any(a in blocked for a in probe):
+                restricted += [{"item": "full admin", "blocked_by": blocked[next(a for a in probe if a in blocked)]}]
+                admin = []
+            elif admin and (rinfo.get("admin") or {}).get("decision") == "Denied":
+                # the evaluator (explicit Deny / boundary / SCP applied) says some core action is denied
+                restricted += [{"item": "full admin", "blocked_by": "evaluated: " + str(rinfo["admin"]["reason"])}]
+                admin = []
+            keep = []
+            for e in esc:
+                acts = e["path"].replace(" + ", "|").split("|")
+                hit = next((a for a in acts if a in blocked), None)
+                if hit:
+                    restricted.append({"item": e["path"], "blocked_by": blocked[hit]})
+                else:
+                    keep.append(e)
+            esc = keep
+            unknown_layers = rinfo["unknown_layers"]
+        except Exception as exc:  # the restriction pass must never hide a finding
+            unknown_layers = [f"restriction analysis failed ({exc.__class__.__name__})"]
         bad = bool(admin or esc)
         # "Scoped" needs every policy read: the collector marks principals whose documents could not all
         # be read; older inventories (demo/IaC/snapshots without documents) fall back to the name list.
         complete = p.get("policies_complete") if "policies_complete" in p else names is not None
+        if not docs and "policies_complete" not in p and not bad:
+            # v2.3: a list of policy NAMES (demo data / old snapshots) cannot prove a principal is scoped
+            complete = False
         if not bad and not complete:
-            continue  # unknown is neither admin nor scoped
+            # v2.3: Unknown / Incomplete is reported as such (never as "scoped"/passed)
+            yield CheckResult((p.get("arn") or f"arn:aws:iam::{acct}:{kind}/{p['name']}"), None,
+                              "Unknown: not every policy of this principal could be read, so admin / escalation "
+                              "cannot be ruled out", {"documents_evaluated": len(docs or []), "groups": p.get("groups"),
+                                                     "confidence": "unknown"})
+            continue
         if admin:
             detail = "Full admin (*:* on *) via " + ", ".join(sorted({x["policy"] for x in admin}))
         elif esc:
@@ -370,10 +421,21 @@ def admin_policy(inv):
             detail = "Scoped permissions" + (f" ({len(docs)} policy documents evaluated)" if docs else "")
         if bad and (admin and all(x["conditional"] for x in admin) if admin else all(e["conditional"] for e in esc)):
             detail += " [conditional: the granting statements carry Conditions that were not evaluated]"
-        yield CheckResult(f"arn:aws:iam::{acct}:{kind}/{p['name']}", not bad, detail,
+        name_only = bool(admin) and all(x.get("source") == "managed (name match)" for x in admin) and not esc
+        if name_only:
+            detail += " [unverified: policy NAME only - the document was not read]"
+        if bad and unknown_layers:
+            detail += " [unconfirmed: " + ", ".join(unknown_layers) + " not evaluated]"
+        if restricted:
+            detail += " (" + "; ".join(f"{r['item']} blocked by {r['blocked_by']}" for r in restricted[:3]) + ")"
+        yield CheckResult((p.get("arn") or f"arn:aws:iam::{acct}:{kind}/{p['name']}"), not bad, detail,
                           {"admin_via": admin, "escalation": esc, "documents_evaluated": len(docs or []),
-                           "groups": p.get("groups"),
-                           "not_evaluated": "permission boundaries, SCPs, session/resource policies, conditions"})
+                           "groups": p.get("groups"), "restricted_by_other_layers": restricted,
+                           "basis": "policy name only (unverified)" if name_only else "policy documents",
+                           "confidence": "low" if name_only else ("unconfirmed" if unknown_layers else "confirmed"),
+                           "layers_not_evaluated": unknown_layers,
+                           "not_evaluated": "session policies, cross-account/resource policies; conditions are "
+                                            "evaluated on the IAM page (shieldiq/iam), not here"})
 
 
 @fixer("AWS-IAM-005")
@@ -388,6 +450,15 @@ def _fix_admin(inv, rid):
         if "AdministratorAccess" in (it.get(key) or []):
             it[key] = [p for p in it[key] if p != "AdministratorAccess"] + ["ReadOnlyAccess"]
             changed = True
+            if not it.get("policy_documents") and "policies_complete" not in it:
+                # v2.3: names alone no longer prove a principal is scoped, so the stored (demo/snapshot) inventory
+                # gets the replacement policy's document too (an abridged read-only stand-in, labelled as such).
+                it["policy_documents"] = [{"name": "ReadOnlyAccess",
+                                           "source": "managed:arn:aws:iam::aws:policy/ReadOnlyAccess",
+                                           "document": {"Version": "2012-10-17", "Statement": [{
+                                               "Sid": "ShieldIQAbridgedReadOnlyStandIn", "Effect": "Allow",
+                                               "Action": ["*:Describe*", "*:List*", "*:Get*"], "Resource": "*"}]}}]
+                it["policies_complete"] = True
         docs = it.get("policy_documents") or []
         keep = [d for d in docs if not (analyze_iam([d])["admin"] or analyze_iam([d])["escalation"])]
         if len(keep) != len(docs):
@@ -769,3 +840,73 @@ def _fix_gd(inv, rid):
         if isinstance(g, dict) and rid.startswith(f"arn:aws:guardduty:{g.get('region')}:"):
             g["enabled"] = True
     return True
+
+
+@rule("AWS-IAM-007", "aws", "IAM", "IAM principal has an evidence-based privilege-escalation path to administrator",
+      "high",
+      "A user or role can reach full-account administrator through a chain of permissions it is actually granted "
+      "(assume a privileged role, rewrite a trust policy, attach/put/create-version a policy, pass a role to a "
+      "service, take over another user's credentials).",
+      ["access"],
+      "The evaluated identity policies (with boundaries, SCPs and explicit denies applied where collected) allow each "
+      "step of the path; the evidence lists the exact policy statement behind every step.",
+      "An attacker who compromises the starting principal can become administrator of the whole account in a few "
+      "API calls, even though the principal itself is not an administrator.",
+      ["Open the path in the IAM page and read the evidence for each step.",
+       "Remove or scope the permission behind the first step (the cheapest place to break the chain).",
+       "Prefer explicit role ARNs over Resource \"*\" for iam:PassRole / sts:AssumeRole, and restrict who can modify "
+       "trust policies and policy versions.",
+       "Use the remediation preview on this finding to see the before/after policy diff and the impact, then re-scan."],
+      cli="# Review the path evidence first. Example: inspect the policy behind step 1\n"
+          "aws iam get-account-authorization-details --filter User Role Group LocalManagedPolicy > authz.json",
+      refs=["CIS AWS 1.16"], asset="identity")
+def escalation_paths(inv):
+    from .iam_effective import analyzer_for
+    an = analyzer_for(inv)
+    m = an.m
+    if not m.principals:
+        return
+    paths = an.paths()
+    by_start = {}
+    for pth in paths:
+        by_start.setdefault(pth["start"]["arn"], []).append(pth)
+    trust_gap = any(r.trust_policy is None for r in m.roles() if not r.service_linked)
+    for p in m.principals.values():
+        if p.service_linked:
+            continue
+        ps = by_start.get(p.arn)
+        if ps:
+            best = ps[0]
+            detail = (f"{len(ps)} path(s) to administrator; best: " + " -> ".join(s["title"] for s in best["steps"])
+                      + f" [confidence: {best['confidence']}]")
+            yield CheckResult(p.arn, False, detail[:900], {
+                "paths": [{k: v for k, v in x.items()} for x in ps[:3]], "confidence": best["confidence"],
+                "missing": best["missing"], "engine": "shieldiq.iam (evaluated permissions, not policy names)"})
+            continue
+        if an.admin(p)[0] == "Allowed":
+            yield CheckResult(p.arn, True, "Already a full administrator - reported by AWS-IAM-005, not as a path",
+                              {"see": "AWS-IAM-005"})
+            continue
+        gaps = []
+        if p.identity_complete is not True:
+            gaps.append("not every policy document of this principal was read")
+        if trust_gap:
+            gaps.append("some role trust policies were not collected")
+        if p.kind == "user" and p.groups is None:
+            gaps.append("group membership unknown")
+        if gaps:
+            yield CheckResult(p.arn, None, "Unknown: no path found, but " + "; ".join(gaps), {"missing": gaps})
+        else:
+            yield CheckResult(p.arn, True, "No escalation path to administrator found in the evaluated permissions",
+                              {"layers_unknown": [x for x in ("SCPs",) if (m.scp or {}).get("status") in
+                                                  ("unknown", "unavailable")]})
+
+
+@fixer("AWS-IAM-007")
+def _fix_escalation_path(inv, rid):
+    """Demo / snapshot only: apply the remediation preview's least-privilege change to the stored inventory."""
+    from ..iam.remediation import apply_to_inventory, propose
+    prev = propose(inv, rid, "AWS-IAM-007")
+    if not prev.get("ok"):
+        return False
+    return apply_to_inventory(inv, rid, prev["changes"]) > 0

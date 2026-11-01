@@ -1,0 +1,612 @@
+{
+ "account_id": "111122223333",
+ "region": "us-east-1",
+ "_source": "snapshot",
+ "_note": "SYNTHETIC IAM lab inventory for tests, demos and the validation kit - not a real account",
+ "iam_users": [
+  {
+   "name": "alice",
+   "arn": "arn:aws:iam::111122223333:user/alice",
+   "console_access": false,
+   "mfa_enabled": true,
+   "access_keys": [],
+   "groups": []
+  },
+  {
+   "name": "bob",
+   "arn": "arn:aws:iam::111122223333:user/bob",
+   "console_access": false,
+   "mfa_enabled": true,
+   "access_keys": [],
+   "groups": [
+    "devs"
+   ]
+  },
+  {
+   "name": "carol",
+   "arn": "arn:aws:iam::111122223333:user/carol",
+   "console_access": false,
+   "mfa_enabled": true,
+   "access_keys": [],
+   "groups": []
+  },
+  {
+   "name": "dave",
+   "arn": "arn:aws:iam::111122223333:user/dave",
+   "console_access": false,
+   "mfa_enabled": true,
+   "access_keys": [],
+   "groups": []
+  },
+  {
+   "name": "erin",
+   "arn": "arn:aws:iam::111122223333:user/erin",
+   "console_access": false,
+   "mfa_enabled": true,
+   "access_keys": [],
+   "groups": []
+  },
+  {
+   "name": "frank",
+   "arn": "arn:aws:iam::111122223333:user/frank",
+   "console_access": false,
+   "mfa_enabled": true,
+   "access_keys": [],
+   "groups": [
+    "restricted"
+   ]
+  },
+  {
+   "name": "grace",
+   "arn": "arn:aws:iam::111122223333:user/grace",
+   "console_access": false,
+   "mfa_enabled": true,
+   "access_keys": [],
+   "groups": []
+  },
+  {
+   "name": "ivan",
+   "arn": "arn:aws:iam::111122223333:user/ivan",
+   "console_access": false,
+   "mfa_enabled": true,
+   "access_keys": [],
+   "groups": []
+  },
+  {
+   "name": "judy",
+   "arn": "arn:aws:iam::111122223333:user/judy",
+   "console_access": false,
+   "mfa_enabled": true,
+   "access_keys": [],
+   "groups": []
+  }
+ ],
+ "iam_roles": [
+  {
+   "name": "admin-role",
+   "arn": "arn:aws:iam::111122223333:role/admin-role"
+  },
+  {
+   "name": "ops-role",
+   "arn": "arn:aws:iam::111122223333:role/ops-role"
+  },
+  {
+   "name": "app-role",
+   "arn": "arn:aws:iam::111122223333:role/app-role"
+  }
+ ],
+ "s3_buckets": [
+  {
+   "name": "data-bucket",
+   "encryption": "AES256",
+   "versioning": true,
+   "policy_public": false,
+   "acl_public": false,
+   "public_access_block": {
+    "block_public_acls": true,
+    "ignore_public_acls": true,
+    "block_public_policy": true,
+    "restrict_public_buckets": true
+   }
+  },
+  {
+   "name": "secret-bucket",
+   "encryption": "aws:kms",
+   "versioning": true,
+   "policy_public": false,
+   "acl_public": false,
+   "public_access_block": {
+    "block_public_acls": true,
+    "ignore_public_acls": true,
+    "block_public_policy": true,
+    "restrict_public_buckets": true
+   }
+  }
+ ],
+ "iam": {
+  "origin": "snapshot",
+  "account_id": "111122223333",
+  "collected_with": "synthetic lab",
+  "users": [
+   {
+    "name": "alice",
+    "arn": "arn:aws:iam::111122223333:user/alice",
+    "groups": [],
+    "attached": [],
+    "inline": [
+     {
+      "name": "AdminInline",
+      "document": {
+       "Version": "2012-10-17",
+       "Statement": [
+        {
+         "Sid": "Everything",
+         "Effect": "Allow",
+         "Action": "*",
+         "Resource": "*"
+        }
+       ]
+      }
+     }
+    ],
+    "boundary": {
+     "status": "none"
+    }
+   },
+   {
+    "name": "bob",
+    "arn": "arn:aws:iam::111122223333:user/bob",
+    "groups": [
+     "devs"
+    ],
+    "attached": [],
+    "inline": [],
+    "boundary": {
+     "status": "none"
+    }
+   },
+   {
+    "name": "carol",
+    "arn": "arn:aws:iam::111122223333:user/carol",
+    "groups": [],
+    "attached": [
+     {
+      "name": "PassRoleEC2",
+      "arn": "arn:aws:iam::111122223333:policy/PassRoleEC2"
+     }
+    ],
+    "inline": [],
+    "boundary": {
+     "status": "none"
+    }
+   },
+   {
+    "name": "dave",
+    "arn": "arn:aws:iam::111122223333:user/dave",
+    "groups": [],
+    "attached": [],
+    "inline": [
+     {
+      "name": "IamAll",
+      "document": {
+       "Version": "2012-10-17",
+       "Statement": [
+        {
+         "Effect": "Allow",
+         "Action": "iam:*",
+         "Resource": "*"
+        }
+       ]
+      }
+     }
+    ],
+    "boundary": {
+     "status": "present",
+     "arn": "arn:aws:iam::111122223333:policy/BoundaryS3Only",
+     "name": "BoundaryS3Only"
+    }
+   },
+   {
+    "name": "erin",
+    "arn": "arn:aws:iam::111122223333:user/erin",
+    "groups": [],
+    "attached": [],
+    "inline": [
+     {
+      "name": "AssumeOps",
+      "document": {
+       "Version": "2012-10-17",
+       "Statement": [
+        {
+         "Effect": "Allow",
+         "Action": "sts:AssumeRole",
+         "Resource": "arn:aws:iam::111122223333:role/ops-role"
+        }
+       ]
+      }
+     }
+    ],
+    "boundary": {
+     "status": "none"
+    }
+   },
+   {
+    "name": "frank",
+    "arn": "arn:aws:iam::111122223333:user/frank",
+    "groups": [
+     "restricted"
+    ],
+    "attached": [],
+    "inline": [
+     {
+      "name": "AllButIam",
+      "document": {
+       "Version": "2012-10-17",
+       "Statement": [
+        {
+         "Effect": "Allow",
+         "Action": "*",
+         "Resource": "*"
+        }
+       ]
+      }
+     }
+    ],
+    "boundary": {
+     "status": "none"
+    }
+   },
+   {
+    "name": "grace",
+    "arn": "arn:aws:iam::111122223333:user/grace",
+    "groups": [],
+    "attached": [
+     {
+      "name": "GracePolicy",
+      "arn": "arn:aws:iam::111122223333:policy/GracePolicy"
+     }
+    ],
+    "inline": [],
+    "boundary": {
+     "status": "none"
+    }
+   },
+   {
+    "name": "ivan",
+    "arn": "arn:aws:iam::111122223333:user/ivan",
+    "groups": [],
+    "attached": [
+     {
+      "name": "UnreadablePolicy",
+      "arn": "arn:aws:iam::111122223333:policy/UnreadablePolicy"
+     }
+    ],
+    "inline": [],
+    "boundary": {
+     "status": "none"
+    }
+   },
+   {
+    "name": "judy",
+    "arn": "arn:aws:iam::111122223333:user/judy",
+    "groups": [],
+    "attached": [],
+    "inline": [
+     {
+      "name": "ReadDataNotSecret",
+      "document": {
+       "Version": "2012-10-17",
+       "Statement": [
+        {
+         "Effect": "Allow",
+         "Action": "s3:GetObject",
+         "NotResource": "arn:aws:s3:::secret-bucket/*"
+        }
+       ]
+      }
+     }
+    ],
+    "boundary": {
+     "status": "none"
+    }
+   }
+  ],
+  "groups": [
+   {
+    "name": "devs",
+    "arn": "arn:aws:iam::111122223333:group/devs",
+    "attached": [
+     {
+      "name": "DevPolicy",
+      "arn": "arn:aws:iam::111122223333:policy/DevPolicy"
+     }
+    ],
+    "inline": []
+   },
+   {
+    "name": "restricted",
+    "arn": "arn:aws:iam::111122223333:group/restricted",
+    "attached": [],
+    "inline": [
+     {
+      "name": "DenyIam",
+      "document": {
+       "Version": "2012-10-17",
+       "Statement": [
+        {
+         "Sid": "NoIam",
+         "Effect": "Deny",
+         "Action": "iam:*",
+         "Resource": "*"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  ],
+  "roles": [
+   {
+    "name": "admin-role",
+    "arn": "arn:aws:iam::111122223333:role/admin-role",
+    "path": "/",
+    "trust_policy": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "ec2.amazonaws.com"
+       },
+       "Action": "sts:AssumeRole"
+      }
+     ]
+    },
+    "attached": [
+     {
+      "name": "AdministratorAccess",
+      "arn": "arn:aws:iam::aws:policy/AdministratorAccess"
+     }
+    ],
+    "inline": [],
+    "boundary": {
+     "status": "none"
+    }
+   },
+   {
+    "name": "ops-role",
+    "arn": "arn:aws:iam::111122223333:role/ops-role",
+    "path": "/",
+    "trust_policy": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Principal": {
+        "AWS": "arn:aws:iam::111122223333:root"
+       },
+       "Action": "sts:AssumeRole"
+      }
+     ]
+    },
+    "attached": [],
+    "inline": [
+     {
+      "name": "OpsSelfAttach",
+      "document": {
+       "Version": "2012-10-17",
+       "Statement": [
+        {
+         "Effect": "Allow",
+         "Action": "iam:AttachRolePolicy",
+         "Resource": "arn:aws:iam::111122223333:role/ops-role"
+        }
+       ]
+      }
+     }
+    ],
+    "boundary": {
+     "status": "none"
+    }
+   },
+   {
+    "name": "app-role",
+    "arn": "arn:aws:iam::111122223333:role/app-role",
+    "path": "/",
+    "trust_policy": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "lambda.amazonaws.com"
+       },
+       "Action": "sts:AssumeRole"
+      }
+     ]
+    },
+    "attached": [],
+    "inline": [
+     {
+      "name": "ReadData",
+      "document": {
+       "Version": "2012-10-17",
+       "Statement": [
+        {
+         "Effect": "Allow",
+         "Action": [
+          "s3:GetObject",
+          "s3:ListBucket"
+         ],
+         "Resource": [
+          "arn:aws:s3:::data-bucket",
+          "arn:aws:s3:::data-bucket/*"
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "boundary": {
+     "status": "none"
+    }
+   }
+  ],
+  "policies": {
+   "arn:aws:iam::111122223333:policy/DevPolicy": {
+    "name": "DevPolicy",
+    "default_version": "v3",
+    "document": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+       ],
+       "Resource": "arn:aws:s3:::data-bucket/*"
+      },
+      {
+       "Effect": "Allow",
+       "Action": "ec2:Describe*",
+       "Resource": "*"
+      }
+     ]
+    }
+   },
+   "arn:aws:iam::111122223333:policy/PassRoleEC2": {
+    "name": "PassRoleEC2",
+    "default_version": "v1",
+    "document": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Sid": "PassAdmin",
+       "Effect": "Allow",
+       "Action": "iam:PassRole",
+       "Resource": "arn:aws:iam::111122223333:role/admin-role"
+      },
+      {
+       "Sid": "Launch",
+       "Effect": "Allow",
+       "Action": "ec2:RunInstances",
+       "Resource": "*"
+      }
+     ]
+    }
+   },
+   "arn:aws:iam::111122223333:policy/BoundaryS3Only": {
+    "name": "BoundaryS3Only",
+    "default_version": "v1",
+    "document": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Action": "s3:*",
+       "Resource": "*"
+      }
+     ]
+    }
+   },
+   "arn:aws:iam::111122223333:policy/GracePolicy": {
+    "name": "GracePolicy",
+    "default_version": "v1",
+    "document": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Sid": "MfaVersioning",
+       "Effect": "Allow",
+       "Action": "iam:CreatePolicyVersion",
+       "Resource": "arn:aws:iam::111122223333:policy/GracePolicy",
+       "Condition": {
+        "Bool": {
+         "aws:MultiFactorAuthPresent": "true"
+        }
+       }
+      }
+     ]
+    }
+   },
+   "arn:aws:iam::111122223333:policy/UnreadablePolicy": {
+    "name": "UnreadablePolicy",
+    "default_version": "v1",
+    "document": null
+   },
+   "arn:aws:iam::aws:policy/AdministratorAccess": {
+    "name": "AdministratorAccess",
+    "document": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Action": "*",
+       "Resource": "*"
+      }
+     ]
+    },
+    "aws_managed": true
+   }
+  },
+  "scps": {
+   "status": "not_applicable",
+   "levels": [],
+   "note": "synthetic lab: not in an organization"
+  },
+  "resource_policies": {
+   "arn:aws:s3:::secret-bucket": {
+    "status": "none",
+    "document": null,
+    "name": "secret-bucket"
+   },
+   "arn:aws:s3:::data-bucket": {
+    "status": "none",
+    "document": null,
+    "name": "data-bucket"
+   }
+  },
+  "sources": {
+   "authorization_details": {
+    "status": "collected",
+    "detail": "synthetic"
+   },
+   "managed_policy_documents": {
+    "status": "partial",
+    "detail": "1 unreadable (UnreadablePolicy, on purpose)"
+   },
+   "permissions_boundaries": {
+    "status": "collected"
+   },
+   "trust_policies": {
+    "status": "collected"
+   },
+   "scps": {
+    "status": "not_applicable",
+    "detail": "synthetic lab: not in an organization"
+   },
+   "resource_policies": {
+    "status": "collected",
+    "detail": "S3 bucket policies"
+   }
+  },
+  "errors": [
+   {
+    "api": "iam:GetPolicyVersion",
+    "resource": "arn:aws:iam::111122223333:policy/UnreadablePolicy",
+    "code": "AccessDenied",
+    "status": 403,
+    "kind": "denied"
+   }
+  ]
+ },
+ "account": {
+  "root_mfa": true,
+  "root_access_keys": false,
+  "password_policy": {
+   "min_length": 14,
+   "reuse_prevention": 24
+  }
+ }
+}

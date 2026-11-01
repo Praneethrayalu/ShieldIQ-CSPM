@@ -61,8 +61,13 @@ def _sanitize(exc):
     return code, status
 
 
+_THROTTLED = ("throttl", "requestlimitexceeded", "toomanyrequests", "slowdown")
+
+
 def _kind(code):
     cl = (code or "").lower()
+    if any(t in cl for t in _THROTTLED):
+        return "throttled"  # v2.3: retried by botocore's adaptive retry mode first; still unknown if it persists
     if any(t in cl for t in _DENIED):
         return "denied"
     if any(t in cl for t in _NOT_FOUND):
@@ -147,31 +152,49 @@ def _policy_doc(doc):
 _OPTED_IN = ("opt-in-not-required", "opted-in")
 
 
+def _retry_config(session):
+    """Throttling: real boto3 sessions get botocore's adaptive retry mode (client-side rate limiting + backoff).
+    Test doubles (duck-typed sessions) are left alone."""
+    try:
+        import boto3
+        from botocore.config import Config
+    except ImportError:  # pragma: no cover
+        return None
+    if isinstance(session, boto3.session.Session):
+        return Config(retries={"max_attempts": 8, "mode": "adaptive"})
+    return None
+
+
 def collect(creds: dict, session=None) -> dict:
     s = session or _session(creds)
     errors = []
 
-    def record(label, exc, region=None):
+    def record(label, exc, region=None, resource=None):
         code, status = _sanitize(exc)
         e = {"call": label, "code": code, "status": status, "kind": _kind(code)}
         if region:
             e["region"] = region
+        if resource:
+            e["resource"] = resource  # v2.3: the affected resource (user / role / bucket / ...)
         errors.append(e)
         return code
 
-    def safe(label, fn, default=UNSET, region=None):
+    def safe(label, fn, default=UNSET, region=None, resource=None):
         """Run one read-only call. On failure, record a sanitized error and return `default`
         (UNSET when no default is given) so callers can tell "read failed" from "really empty"."""
         try:
             return fn()
         except Exception as exc:  # AccessDenied etc. -> recorded, scan continues
-            record(label, exc, region)
+            record(label, exc, region, resource)
             return default
 
+    retry_cfg = _retry_config(s)
+
     def client(svc, region=None):
+        kw = {"config": retry_cfg} if retry_cfg is not None else {}
         if region is None or region == getattr(s, "region_name", None):
-            return s.client(svc)
-        return s.client(svc, region_name=region)
+            return s.client(svc, **kw)
+        return s.client(svc, region_name=region, **kw)
 
     try:
         ident = s.client("sts").get_caller_identity()
@@ -229,7 +252,7 @@ def collect(creds: dict, session=None) -> dict:
                 if doc is None:
                     raise ValueError("unparseable policy document")
                 return doc
-            managed_cache[arn] = safe("iam:GetPolicyVersion", read)
+            managed_cache[arn] = safe("iam:GetPolicyVersion", read, resource=arn)
         return managed_cache[arn]
 
     def attached(list_method, get_label, **who):
@@ -308,7 +331,7 @@ def collect(creds: dict, session=None) -> dict:
                     parts.append(UNSET if gi is UNSET else [(n, "group-inline:" + g, d) for n, _src, d in gi])
             names, docs, complete = principal_policies(parts)
             inv["iam_users"].append({
-                "name": name,
+                "name": name, "arn": u.get("Arn"),
                 "console_access": console,
                 "mfa_enabled": None if mfa is UNSET else mfa,
                 # direct + group managed policy names (name match is kept: AdministratorAccess)
@@ -330,8 +353,11 @@ def collect(creds: dict, session=None) -> dict:
             inl = inline("list_role_policies", "get_role_policy", "iam:ListRolePolicies", "iam:GetRolePolicy",
                          RoleName=rn)
             names, docs, complete = principal_policies([att, inl])
-            inv["iam_roles"].append({"name": rn, "policies": None if att is UNSET else names,
-                                     "policy_documents": docs, "policies_complete": complete})
+            entry = {"name": rn, "policies": None if att is UNSET else names,
+                     "policy_documents": docs, "policies_complete": complete, "arn": r.get("Arn")}
+            if r.get("AssumeRolePolicyDocument") is not None:  # v2.3: trust policy (ListRoles returns it)
+                entry["trust_policy"] = _policy_doc(r["AssumeRolePolicyDocument"])
+            inv["iam_roles"].append(entry)
 
     # ---------------------------------------------------------------- S3 (global)
     def pab_dict(cfg):
@@ -521,8 +547,48 @@ def collect(creds: dict, session=None) -> dict:
     if home is not None and home["enabled"] is not None:
         inv["guardduty_enabled"] = home["enabled"]
 
+    # ---------------------------------------------------------------- IAM authorization data (v2.3)
+    # boundaries, trust policies, SCPs and resource policies for the effective-permission engine. Their gaps are
+    # tracked per data source (inv["iam"]["sources"]) and become Indeterminate decisions - never a pass.
+    from . import aws_iam
+    aws_iam.collect(lambda svc, rg=None: client(svc, rg), region, inv, managed_doc=managed_doc)
+
     inv["_errors"] = errors  # every recorded entry is a genuine read failure (legit-absent is not recorded)
     attempted = ("iam", "s3", "s3control", "ec2", "rds", "cloudtrail", "kms", "guardduty")
     failed_services = {e["call"].split(":", 1)[0] for e in errors}
     inv["_coverage"] = {svc: ("partial" if svc in failed_services else "ok") for svc in attempted}
+    inv["_sources"] = completeness(inv)
     return inv
+
+
+SOURCE_LABELS = {
+    "iam": "IAM users / roles / policies (core reads)", "s3": "S3 buckets", "s3control": "S3 account Block Public Access",
+    "ec2": "EC2 (security groups, instances, volumes)", "rds": "RDS", "cloudtrail": "CloudTrail", "kms": "KMS",
+    "guardduty": "GuardDuty", "authorization_details": "IAM authorization details",
+    "managed_policy_documents": "Managed policy documents", "permissions_boundaries": "Permissions boundaries",
+    "trust_policies": "Role trust policies", "scps": "Organizations SCPs", "resource_policies": "Resource-based policies"}
+
+
+def completeness(inv):
+    """Scan completeness indicator (v2.3): one row per data source with status collected / partial / denied /
+    unavailable / not_applicable / not_collected, plus the structured errors that explain it."""
+    rows = []
+    errs = [e for e in inv.get("_errors") or [] if isinstance(e, dict)]
+    for svc, st in (inv.get("_coverage") or {}).items():
+        mine = [e for e in errs if str(e.get("call", "")).split(":", 1)[0] == svc]
+        status = "collected" if st == "ok" else ("denied" if mine and all(e.get("kind") == "denied" for e in mine)
+                                                 else "partial")
+        rows.append({"source": svc, "label": SOURCE_LABELS.get(svc, svc), "status": status, "errors": mine[:20]})
+    ictx = inv.get("iam") if isinstance(inv.get("iam"), dict) else (inv.get("iam_context") or {})
+    ierrs = ictx.get("errors") or []
+    for name, meta in (ictx.get("sources") or {}).items():
+        mine = [e for e in ierrs if name in _API_SOURCE.get(str(e.get("api")), ())]
+        rows.append({"source": name, "label": SOURCE_LABELS.get(name, name), "status": meta.get("status"),
+                     "detail": meta.get("detail"), "errors": mine[:20]})
+    return rows
+
+
+_API_SOURCE = {"iam:GetAccountAuthorizationDetails": ("authorization_details",),
+               "iam:GetUser": ("permissions_boundaries",), "iam:GetRole": ("permissions_boundaries", "trust_policies"),
+               "organizations:DescribeOrganization": ("scps",), "organizations:ListPoliciesForTarget": ("scps",),
+               "s3:GetBucketPolicy": ("resource_policies",)}
