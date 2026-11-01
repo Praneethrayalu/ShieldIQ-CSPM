@@ -31,6 +31,7 @@
       <a href="{{ url_for('views.attack_paths') }}" class="{{ 'active' if ep == 'views.attack_paths' }}">{{ icon('route') }} Attack paths</a>
       <div class="nav-group">Security</div>
       <a href="{{ url_for('views.findings') }}" class="{{ 'active' if ep in ('views.findings', 'views.finding_detail') }}">{{ icon('alert') }} Findings</a>
+      <a href="{{ url_for('views.iam_page') }}" class="{{ 'active' if ep in ('views.iam_page', 'views.iam_principal') }}">{{ icon('users') }} IAM analysis</a>
       <a href="{{ url_for('views.compliance') }}" class="{{ 'active' if ep == 'views.compliance' }}">{{ icon('check-circle') }} Compliance</a>
       <a href="{{ url_for('views.integrations') }}" class="{{ 'active' if ep == 'views.integrations' }}">{{ icon('plug') }} Integrations</a>
       <a href="{{ url_for('views.scanners') }}" class="{{ 'active' if ep == 'views.scanners' }}">{{ icon('scan') }} IaC &amp; secret scan</a>

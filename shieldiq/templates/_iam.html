@@ -1,0 +1,50 @@
+{# v2.3 IAM macros: decision badge, state badge, evidence statements, completeness table, path card #}
+{% macro decision(d) -%}
+<span class="tag" data-decision="{{ d }}" style="{{ 'background:var(--critical-bg,#fde8e8);color:var(--critical,#b42318)' if d == 'Allowed' else ('background:var(--ok-bg,#e7f6ec);color:var(--ok,#067647)' if d == 'Denied' else 'background:#fff4e5;color:#b54708') }}">{{ d }}</span>
+{%- endmacro %}
+{% macro state(s) -%}
+<span class="tag" data-state="{{ s }}" style="{{ 'background:#fde8e8;color:#b42318' if s == 'Finding' else ('background:#e7f6ec;color:#067647' if s == 'Secure' else 'background:#fff4e5;color:#b54708') }}">{{ 'Unknown / incomplete' if s == 'Unknown' else s }}</span>
+{%- endmacro %}
+{% macro conf(c) -%}<span class="tag" data-confidence="{{ c }}">{{ c }}</span>{%- endmacro %}
+{% macro statements(ev) %}
+{% for e in ev %}
+<div class="small" style="margin:6px 0">
+  <div class="row wrap" style="gap:6px"><span class="tag">{{ e.layer }}</span><span class="tag">{{ e.effect }}</span>
+    <b class="mono">{{ e.policy }}</b><span class="faint tiny">{{ e.via }}{% if e.sid %} · Sid {{ e.sid }}{% endif %} · statement #{{ e.statement_index }} · match: {{ e.match }}</span></div>
+  <pre style="margin:4px 0 0;max-height:180px;overflow:auto"><code>{{ e.statement|tojson(indent=1) }}</code></pre>
+</div>
+{% endfor %}
+{% endmacro %}
+{% macro completeness(rows) %}
+<div class="table-wrap"><table class="table" data-completeness>
+  <thead><tr><th>Data source</th><th>Status</th><th>Detail / errors (API · resource · code)</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr><td>{{ r.label or r.source }}</td>
+    <td><span class="tag" data-source-status="{{ r.status }}" style="{{ 'background:#e7f6ec;color:#067647' if r.status in ('collected', 'not_applicable', 'management_account', 'disabled') else 'background:#fff4e5;color:#b54708' }}">{{ (r.status or 'unknown')|replace('_', ' ') }}</span></td>
+    <td class="small">{{ r.detail or '' }}
+      {% for e in r.errors or [] %}<div class="mono tiny faint">{{ e.api or e.call }} · {{ e.resource or e.region or '-' }} · {{ e.code }} ({{ e.kind }})</div>{% endfor %}</td></tr>
+  {% endfor %}
+  </tbody></table></div>
+{% endmacro %}
+{% macro path_card(p) %}
+<section class="card" style="margin-bottom:var(--s-4)" data-iam-path="{{ p.id }}">
+  <div class="card-head"><h3><span class="mono">{{ p.id }}</span> {{ p.start.kind }} <span class="mono">{{ p.start.name }}</span> → {{ p.target }}</h3>
+    <div class="row" style="gap:6px"><span class="tag">{{ p.severity }}</span>{{ conf(p.confidence) }}{% if p.integration %}<span class="tiny faint">{{ p.integration }}</span>{% endif %}</div></div>
+  <p class="small muted">{{ p.status }}. {{ p.hops }} step(s).</p>
+  <ol class="steps-list">
+  {% for s in p.steps %}
+    <li><div class="row wrap" style="gap:8px"><b>{{ s.title }}</b>{{ conf(s.confidence) }}</div>
+      <details style="margin-top:6px;display:block"><summary class="small link">Policy evidence for this step</summary>
+      {% for ev in s.evidence %}
+        <div class="small" style="margin-top:6px"><span class="mono">{{ ev.action }}</span> on <span class="mono" style="word-break:break-all">{{ ev.resource }}</span> → {{ decision(ev.decision) }} <span class="tiny faint">{{ ev.reason }}</span></div>
+        {{ statements(ev.statements) }}
+        {% for m in ev.missing %}<div class="tiny" style="color:#b54708">Missing: {{ m }}</div>{% endfor %}
+        {% for n in ev.notes %}<div class="tiny faint">Note: {{ n }}</div>{% endfor %}
+      {% endfor %}
+      </details></li>
+  {% endfor %}
+  </ol>
+  {% if p.missing %}<div class="hint">Uncertain because: {{ p.missing|join('; ') }}</div>{% endif %}
+</section>
+{% endmacro %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon %}
+{% from "_iam.html" import state, completeness, path_card %}
+{% block title %}IAM analysis{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="eyebrow">Security</div><h1>IAM effective permissions</h1>
+    <p>Who can actually do what, evaluated from the collected policy documents: explicit Deny first, then SCPs, resource policies, identity policies and permissions boundaries. Results are <b>Allowed</b>, <b>Denied</b> or <b>Indeterminate</b>; anything ShieldIQ could not read is shown as <b>Unknown / incomplete</b>, never as secure.</p></div>
+  {% if a %}<div class="head-figs">
+    <div><span class="eyebrow">Finding</span><b class="figure" data-count="Finding">{{ a.counts.Finding }}</b></div>
+    <div><span class="eyebrow">Unknown</span><b class="figure" data-count="Unknown">{{ a.counts.Unknown }}</b></div>
+    <div><span class="eyebrow">Secure</span><b class="figure" data-count="Secure">{{ a.counts.Secure }}</b></div>
+  </div>{% endif %}
+</div>
+{% if not a %}
+<div class="card empty">{{ icon('plug') }}<h2>No AWS inventory yet</h2><p>Connect an AWS account (or import a snapshot) and run a scan to analyse IAM.</p></div>
+{% else %}
+{% if items|length > 1 %}<form method="get" class="row" style="gap:8px;margin-bottom:16px"><select name="integration" style="width:auto">{% for i in items %}<option value="{{ i.id }}" {{ 'selected' if i.id == integ.id }}>{{ i.name }} ({{ i.mode }})</option>{% endfor %}</select><button class="btn sm" type="submit">Show</button></form>{% endif %}
+<p class="small"><span class="tag">{{ integ.name }} · {{ integ.mode }}</span> <span class="muted">model source: {{ a.origin }}</span>
+{% if integ.mode != 'live' %}<span class="tag">Not verified scanner evidence ({{ integ.mode }} data)</span>{% endif %}</p>
+
+<section class="card" style="margin-bottom:24px" data-reveal>
+  <div class="card-head"><h3>Collection completeness</h3><span class="tiny faint">which data sources were read for this analysis</span></div>
+  {{ completeness(a.completeness) }}
+  <p class="hint">SCPs: <b>{{ (a.scp.status or 'unknown')|replace('_', ' ') }}</b> — {{ a.scp.note }}. Where a source is partial, denied or unavailable, decisions that depend on it are <b>Indeterminate</b> and principals that cannot be fully evaluated are <b>Unknown</b>.</p>
+</section>
+
+<section class="card pad-0" style="margin-bottom:24px" data-reveal>
+  <div class="card-head" style="padding:var(--s-5) var(--s-5) 0"><h3>Principals</h3><span class="tiny faint">click a principal for its permission sources, evidence and the evaluator</span></div>
+  <div class="table-wrap"><table class="table" data-iam-principals>
+    <thead><tr><th>Principal</th><th>State</th><th>Full admin</th><th>Escalation capabilities</th><th>Permission sources</th><th>Boundary</th></tr></thead>
+    <tbody>
+    {% for r in a.principals %}
+    <tr data-principal="{{ r.name }}">
+      <td><a class="link mono" href="{{ url_for('views.iam_principal', iid=integ.id, kind=r.kind, name=r.name) }}">{{ r.name }}</a><div class="tiny faint">{{ r.kind }}{% if r.service_linked %} · service-linked{% endif %}</div></td>
+      <td>{{ state(r.state) }}</td>
+      <td><span class="tag">{{ r.admin }}</span></td>
+      <td class="small">{% for e in r.escalations[:3] %}<div>{{ e.title }} <span class="tag">{{ e.confidence }}</span></div>{% else %}<span class="faint">none found</span>{% endfor %}{% if r.escalations|length > 3 %}<div class="tiny faint">+{{ r.escalations|length - 3 }} more</div>{% endif %}</td>
+      <td class="tiny">direct {{ r.sources.direct|length }} · group {{ r.sources.group|length }} · role {{ r.sources.role|length }}{% if not r.identity_complete %}<div style="color:#b54708">some policies unreadable</div>{% endif %}</td>
+      <td class="tiny">{{ r.boundary.status }}</td>
+    </tr>
+    {% endfor %}
+    </tbody></table></div>
+</section>
+
+<h2 style="font-size:var(--t-16);margin-bottom:12px">Evidence-based IAM attack paths <span class="mono faint" style="font-weight:400">· {{ a.paths|length }}</span></h2>
+{% for p in a.paths %}{{ path_card(p) }}{% else %}<div class="card empty"><p>No privilege-escalation path to administrator was found in the evaluated permissions{% if a.counts.Unknown %} — but {{ a.counts.Unknown }} principal(s) could not be fully evaluated (Unknown){% endif %}.</p></div>{% endfor %}
+{% endif %}
+{% endblock %}

@@ -81,6 +81,14 @@ def context_summary(org_id, compliance=None, score=None):
     if graph["choke_points"]:
         c = graph["choke_points"][0]
         lines.append(f"Best choke point: {c['node']['label']} (in {c['paths']} paths)")
+    try:  # v2.3: IAM effective-permission summary (evidence-based; Allowed/Denied/Indeterminate)
+        for a in _iam_analyses(org_id):
+            lines.append(f"IAM ({a['integration'].name}, {a['integration'].mode}): principals {a['counts']}; "
+                         f"SCPs {a['scp'].get('status')}")
+            for p in a["paths"][:3]:
+                lines.append(f"- {p['id']} [{p['confidence']}] " + " -> ".join(s["title"] for s in p["steps"]))
+    except Exception:  # pragma: no cover
+        pass
     return "\n".join(lines), fs, graph
 
 
@@ -106,6 +114,11 @@ def _offline_answer(q, org_id, compliance, score):
             c = graph["choke_points"][0]
             out += f"\n\nQuick win: fixing **{c['node']['label']}** breaks {c['paths']} attack path(s) at once."
         return out
+    if any(w in ql for w in ("iam", "permission", "effective", "indeterminate", "privilege", "escalat", "boundary",
+                             "scp", "assume", "passrole", "least-privilege", "least privilege", "who can")):
+        ans = iam_answer(org_id, q)
+        if ans:
+            return ans
     if any(w in ql for w in ("attack", "path", "chain", "lateral", "breach")):
         if not graph["paths"]:
             return "No internet-to-data attack paths right now. Nice."
@@ -170,3 +183,92 @@ def chat(question, org_id, compliance=None, score=None, history=None):
             return _label({"answer": ans, "engine": "offline",
                            "note": f"LLM unavailable ({exc.__class__.__name__}), used offline engine"})
     return _label({"answer": _offline_answer(question, org_id, compliance, score), "engine": "offline"})
+
+
+# ---------------------------------------------------------------- IAM (v2.3)
+_ACTION_RE = re.compile(r"\b([a-z0-9-]+:[A-Za-z*?]+)\b")
+
+
+def _iam_analyses(org_id):
+    from ..models import Integration
+    from . import iam_service
+    out = []
+    for integ in Integration.query.filter_by(org_id=org_id, provider="aws").all():
+        if integ.snapshot:
+            try:
+                out.append(iam_service.analysis(integ))
+            except Exception:  # pragma: no cover - never break the chat
+                continue
+    return out
+
+
+def iam_answer(org_id, q):
+    """Explain effective permissions from collected evidence. Sections keep verified facts, assumptions and missing
+    data apart. Returns None when there is no AWS inventory."""
+    analyses = _iam_analyses(org_id)
+    if not analyses:
+        return None
+    ql = q.lower()
+    for a in analyses:
+        integ = a["integration"]
+        origin = "live read-only scan" if integ.mode == "live" else f"{integ.mode} data (not verified against a live account)"
+        for r in a["principals"]:
+            if r["name"].lower() in ql:
+                p = a["model"].get(r["kind"], r["name"])
+                res = re.search(r"(arn:aws[^\s,?]+)", q)
+                acts = [x for x in _ACTION_RE.findall(re.sub(r"arn:aws[^\s,?]+", " ", q))
+                        if not x.lower().startswith(("arn:", "aws:", "http"))]
+                facts, assumptions, missing = [], [], []
+                if acts:
+                    from ..iam.evaluator import evaluate as _eval
+                    d = _eval(a["model"], p, acts[0], res.group(1) if res else "*")
+                    facts.append(f"`{d.action}` on `{d.resource}` evaluates to **{d.decision}** ({d.reason}).")
+                    for e in d.evidence[:4]:
+                        facts.append(f"{e['layer']} {e['effect']} statement #{e['statement_index']} in "
+                                     f"**{e['policy']}** ({e['via']}), match: {e['match']}")
+                    missing += d.missing
+                    assumptions += [f"note: {n}" for n in d.notes]
+                else:
+                    facts.append(f"Full administrator: **{r['admin']}**. State: **{r['state']}**.")
+                    for e in r["escalations"][:5]:
+                        facts.append(f"{e['title']} (confidence: {e['confidence']})")
+                    srcs = r["sources"]
+                    facts.append(f"Permission sources: {len(srcs['direct'])} direct, {len(srcs['group'])} via groups, "
+                                 f"{len(srcs['role'])} role policies; boundary: {r['boundary']['status']}.")
+                    if r["unknown_capabilities"]:
+                        missing.append("could not rule out: " + "; ".join(r["unknown_capabilities"][:4]))
+                    if not r["identity_complete"]:
+                        missing.append("some of its policy documents could not be read")
+                if (a["scp"] or {}).get("status") in ("unknown", "unavailable"):
+                    missing.append("SCPs: " + str(a["scp"].get("note")))
+                assumptions.append("'Allowed' means allowed by every layer ShieldIQ collected (identity, boundary, "
+                                   "SCPs, collected resource policies); session policies and cross-account access "
+                                   "are not modelled.")
+                assumptions.append("Condition keys not present in the request context are treated as unknown, so "
+                                   "conditional grants come out Indeterminate rather than Allowed.")
+                out = (f"**{r['kind']} {r['name']}** ({integ.name}, {origin})\n\n**Verified from collected policies:**\n"
+                       + "\n".join(f"- {x}" for x in facts)
+                       + "\n\n**Assumptions:**\n" + "\n".join(f"- {x}" for x in assumptions)
+                       + "\n\n**Missing data:**\n" + ("\n".join(f"- {x}" for x in dict.fromkeys(missing)) or "- none"))
+                paths = [x for x in a["paths"] if x["start"]["arn"] == r["arn"]]
+                if paths:
+                    out += ("\n\n**Least-privilege recommendation:** break the first step of "
+                            f"{paths[0]['id']} ({paths[0]['steps'][0]['title']}); open its finding and use "
+                            "'Generate preview' for the exact policy diff and impact.")
+                return out
+    lines = []
+    for a in analyses:
+        c = a["counts"]
+        lines.append(f"**{a['integration'].name}** ({a['integration'].mode}): {c.get('Finding', 0)} principal(s) with "
+                     f"findings, {c.get('Unknown', 0)} unknown/incomplete, {c.get('Secure', 0)} secure. "
+                     f"SCPs: {a['scp'].get('status')}.")
+        for p in a["paths"][:3]:
+            lines.append(f"- {p['id']} [{p['confidence']}] {p['start']['name']}: "
+                         + " -> ".join(s["title"] for s in p["steps"]))
+        gaps = [r["source"] for r in a["completeness"] if r.get("status") not in
+                ("collected", "not_applicable", "management_account", "disabled")]
+        if gaps:
+            lines.append(f"  Incomplete data sources: {', '.join(gaps)} - results that depend on them are Indeterminate.")
+    lines.append("\nAsk about a principal by name (e.g. 'why can carol use iam:PassRole?') for the exact policy evidence. "
+                 "Paths marked 'likely' or 'unverified' are not confirmed vulnerabilities.")
+    return "\n".join(lines)

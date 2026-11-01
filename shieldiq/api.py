@@ -14,7 +14,7 @@ from .collectors.iac import parse_any
 from .extensions import db
 from .models import FINDING_STATUSES, SEVERITIES, ApiToken, Finding, Integration, utcnow
 from .rules import RULES
-from .services import attack_graph, audit, copilot, dashboard_data, org_compliance
+from .services import attack_graph, audit, copilot, dashboard_data, iam_service, org_compliance
 from .services.remediation import RemediationError, apply_fix
 from .services.scanner import posture_score, scan_integration
 
@@ -191,6 +191,91 @@ def compliance():
 @api_auth()
 def attack_paths():
     return jsonify(attack_graph.build(_org()))
+
+
+# ---------------------------------------------------------------- IAM effective permissions (v2.3)
+def _aws_integ(iid):
+    i = Integration.query.filter_by(id=iid, org_id=_org(), provider="aws").first()
+    return i if i is not None and i.snapshot else None
+
+
+def _principal_json(r):
+    return {k: r[k] for k in ("arn", "name", "kind", "state", "admin", "escalations", "unknown_capabilities",
+                              "sources", "groups", "boundary", "identity_complete", "service_linked")}
+
+
+@bp.get("/iam/<int:iid>")
+@api_auth()
+def iam_summary(iid):
+    integ = _aws_integ(iid)
+    if integ is None:
+        return jsonify(error="Not found (no AWS inventory)"), 404
+    a = iam_service.analysis(integ)
+    return jsonify(integration_id=iid, mode=integ.mode, model_origin=a["origin"], counts=a["counts"],
+                   completeness=a["completeness"], scp=a["scp"], principals=[_principal_json(r) for r in a["principals"]],
+                   attack_paths=a["paths"], verified_by_scanner=integ.mode == "live")
+
+
+@bp.get("/iam/<int:iid>/attack-paths")
+@api_auth()
+def iam_paths(iid):
+    integ = _aws_integ(iid)
+    if integ is None:
+        return jsonify(error="Not found (no AWS inventory)"), 404
+    return jsonify(attack_paths=iam_service.analysis(integ)["paths"])
+
+
+@bp.post("/iam/<int:iid>/evaluate")
+@api_auth()
+def iam_evaluate(iid):
+    integ = _aws_integ(iid)
+    if integ is None:
+        return jsonify(error="Not found (no AWS inventory)"), 404
+    d = request.get_json(silent=True) or {}
+    kind, name, action = str(d.get("kind") or "user"), str(d.get("name") or ""), str(d.get("action") or "")
+    if kind not in ("user", "role") or not name or not action:
+        return jsonify(error="kind (user|role), name and action are required"), 400
+    ctx = d.get("context") if isinstance(d.get("context"), dict) else {}
+    try:
+        dec = iam_service.evaluate_request(integ, kind, name, action[:200], str(d.get("resource") or "*")[:500],
+                                           ctx, complete=bool(d.get("context_complete")))
+    except iam_service.IamWorkflowError as exc:
+        return jsonify(error=str(exc)), 404
+    return jsonify(dec.to_dict())
+
+
+@bp.post("/findings/<int:fid>/iam-remediation")
+@api_auth("remediate")
+def iam_rem_preview(fid):
+    f = Finding.query.filter_by(id=fid, org_id=_org()).first()
+    if not f:
+        return jsonify(error="Not found"), 404
+    try:
+        rem = iam_service.preview(f, g.api_user.email)
+    except iam_service.IamWorkflowError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(id=rem.id, status=rem.status, preview=rem.steps, dry_run=True)
+
+
+@bp.post("/findings/<int:fid>/iam-remediation/<int:rid>/<step>")
+@api_auth("remediate")
+def iam_rem_step(fid, rid, step):
+    f = Finding.query.filter_by(id=fid, org_id=_org()).first()
+    if not f:
+        return jsonify(error="Not found"), 404
+    d = request.get_json(silent=True) or {}
+    try:
+        if step == "approve":
+            rem = iam_service.approve(f, rid, g.api_user.email, d.get("confirm"))
+        elif step == "apply":
+            rem = iam_service.apply(f, rid, g.api_user.email)
+        elif step == "verify":
+            rem = iam_service.verify(f, rid, g.api_user.email)
+        else:
+            return jsonify(error="unknown step"), 404
+    except iam_service.IamWorkflowError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(id=rem.id, status=rem.status, output=rem.output, verification=(rem.steps or {}).get("verification"))
 
 
 @bp.get("/rules")

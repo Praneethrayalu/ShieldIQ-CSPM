@@ -99,4 +99,51 @@
     </div>
   </div>
 </div>
+
+{% if iam_capable %}
+{# v2.3: safe IAM remediation - preview (dry run) -> validate -> explicit approval -> apply (stored inventories) / manual (live) -> re-scan #}
+<section class="card" id="iam-remediation" style="margin-top:24px" data-iam-remediation>
+  <div class="card-head"><h3>IAM remediation preview</h3><span class="tiny faint">dry run first · explicit approval · re-scan to verify</span></div>
+  {% if current_user.can('remediate') %}
+  <form method="post" action="{{ url_for('views.iam_remediation_preview', fid=f.id) }}" data-loading="Building preview…">{{ csrf() }}<button class="btn sm" type="submit">Generate preview (no changes)</button></form>
+  {% endif %}
+  {% for r in iam_rems[:3] %}{% set s = r.steps or {} %}
+  <div class="stack" style="margin-top:16px;border-top:1px solid var(--line,#e5e7eb);padding-top:12px" data-iam-rem="{{ r.id }}" data-status="{{ r.status }}">
+    <div class="row wrap" style="gap:8px"><b>Preview #{{ r.id }}</b><span class="tag">{{ r.status|replace('_', ' ') }}</span><span class="tiny faint">{{ r.created_at }} · {{ r.executed_by }}</span>{% if s.approval %}<span class="tag">approved by {{ s.approval.by }}</span>{% endif %}</div>
+    {% if not s.ok %}<p class="small">{{ s.error }}</p>{% else %}
+    <div><div class="eyebrow">risk, in plain words</div><p class="small" style="margin:4px 0">{{ s.risk }}</p></div>
+    <div><div class="eyebrow">what causes it</div>
+      {% for o in s.offending %}<div class="small"><b class="mono">{{ o.policy }}</b> <span class="faint">({{ o.via }})</span></div><pre><code>{{ o.statements|tojson(indent=1) }}</code></pre>{% endfor %}</div>
+    <div><div class="eyebrow">proposed least-privilege change · before / after diff</div>
+      {% for c in s.changes %}<div class="small"><b class="mono">{{ c.policy }}</b> ({{ c.kind }}){% if c.removed_actions %} · removes {{ c.removed_actions|join(', ') }}{% endif %}{% if c.denied_by_guard %} · adds an explicit Deny for {{ c.denied_by_guard|join(', ') }}{% endif %}{% if c.remove_policy %} · <b>nothing would remain: remove (detach / delete) this policy</b>{% elif not c.editable %} · <b>AWS-managed: replaced by a customer-managed copy</b>{% endif %}</div>
+      <pre data-copy><code>{{ c.diff }}</code></pre>{% endfor %}</div>
+    <div><div class="eyebrow">validation (before anything is applied)</div>
+      <ul class="small">
+        <li>Structure / size: {{ 'OK' if not s.validation.structural_problems else s.validation.structural_problems|join('; ') }}</li>
+        <li>Risky permissions still possible after the change: {{ s.validation.risky_still_possible|length }}</li>
+        <li>Full admin after: {{ s.validation.admin_after }} · escalation paths after: {{ s.validation.paths_after }}</li>
+        <li>Finding clears in ShieldIQ's model: <b>{{ 'yes' if s.validation.resolved_in_model else 'no' }}</b></li>
+        <li>AWS policy simulator: {{ s.validation.aws_simulator.status }} — {{ s.validation.aws_simulator.detail }}</li>
+      </ul></div>
+    <div><div class="eyebrow">impact / possible disruption</div>
+      <p class="small">{{ s.validation.disruption }}</p>
+      {% if s.impact %}<div class="table-wrap"><table class="table"><thead><tr><th>Action</th><th>Before</th><th>After</th></tr></thead><tbody>{% for i in s.impact[:25] %}<tr><td class="mono small">{{ i.action }}</td><td>{{ i.before }}</td><td>{{ i.after }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}</div>
+    {% if s.mode == 'manual' %}<div><div class="eyebrow">manual steps (live account: ShieldIQ never changes AWS)</div><pre data-copy><code>{{ s.instructions|join('\n') }}</code></pre>
+      {% for c in s.changes %}<details><summary class="small link">proposed document: {{ c.policy }}</summary><pre data-copy><code>{{ c.after|tojson(indent=2) }}</code></pre></details>{% endfor %}</div>{% endif %}
+    {% if current_user.can('remediate') %}
+      {% if r.status == 'preview' and s.validation.ok %}
+      <form method="post" action="{{ url_for('views.iam_remediation_step', fid=f.id, rid=r.id, step='approve') }}" class="row wrap" style="gap:8px">{{ csrf() }}
+        <input name="confirm" placeholder="type {{ s.principal_name }} to approve" required style="width:auto"><button class="btn sm" type="submit">Approve change</button></form>
+      {% elif r.status == 'approved' and s.mode == 'inventory' %}
+      <form method="post" action="{{ url_for('views.iam_remediation_step', fid=f.id, rid=r.id, step='apply') }}" data-confirm="Apply the approved change to the stored {{ f.integration.mode }} inventory and re-scan?">{{ csrf() }}<button class="btn primary sm" type="submit">Apply to {{ f.integration.mode }} inventory &amp; re-scan</button></form>
+      {% elif r.status in ('approved', 'not_resolved') and s.mode == 'manual' %}
+      <form method="post" action="{{ url_for('views.iam_remediation_step', fid=f.id, rid=r.id, step='verify') }}">{{ csrf() }}<button class="btn sm" type="submit">I applied it — verify by re-scan</button></form>
+      {% endif %}
+    {% endif %}
+    {% if s.verification %}<div class="hint" data-verification="{{ 'resolved' if s.verification.resolved else 'not_resolved' }}"><b>Verification:</b> {{ r.output }} (scan {{ s.verification.scan_status }}, {{ s.verification.at }})</div>{% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 {% endblock %}

@@ -8,7 +8,7 @@ from flask import Flask, jsonify, render_template, request
 from .config import Config
 from .extensions import csrf, db, login_manager
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 
 
 def create_app(config_class=Config, **overrides):

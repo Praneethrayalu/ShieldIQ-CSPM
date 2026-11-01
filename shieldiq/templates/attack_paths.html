@@ -51,4 +51,9 @@
 </section>
 {% endfor %}
 {% endif %}
+
+{# v2.3: evidence-based IAM privilege-escalation paths (from evaluated permissions, not policy names) #}
+{% from "_iam.html" import path_card %}
+<h2 style="font-size:var(--t-16);margin:24px 0 12px" id="iam-paths">IAM privilege-escalation paths <span class="mono faint" style="font-weight:400">· {{ iam_paths|length }} · evidence per step</span></h2>
+{% for p in iam_paths %}{{ path_card(p) }}{% else %}<div class="card empty"><p>No IAM privilege-escalation path found in the evaluated AWS permissions (see the IAM page for principals that could not be fully evaluated).</p></div>{% endfor %}
 {% endblock %}

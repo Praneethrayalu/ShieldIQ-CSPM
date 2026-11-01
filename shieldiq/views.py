@@ -17,6 +17,7 @@ from .services import (attack_graph, audit, copilot, coverage_notes, dashboard_d
                      org_compliance, reports)
 from .services.compliance import FRAMEWORKS, control_labels
 from .services.remediation import RemediationError, apply_fix, fix_script, open_github_pr
+from .services import iam_service
 from .services.scanner import posture_score, scan_all, scan_integration
 
 bp = Blueprint("views", __name__)
@@ -239,8 +240,10 @@ def finding_detail(fid):
     f = _finding(fid)
     analysis = copilot.analyze_finding(f)
     rems = Remediation.query.filter_by(finding_id=f.id).order_by(Remediation.id.desc()).all()
-    return render_template("finding_detail.html", f=f, a=analysis, rule=get_rule(f.rule_id), rems=rems,
-                           STATUSES=FINDING_STATUSES)
+    iam_rems = [r for r in rems if r.mode == "iam_preview"]
+    return render_template("finding_detail.html", f=f, a=analysis, rule=get_rule(f.rule_id),
+                           rems=[r for r in rems if r.mode != "iam_preview"], iam_rems=iam_rems,
+                           iam_capable=f.rule_id in iam_service.IAM_RULES, STATUSES=FINDING_STATUSES)
 
 
 @bp.route("/findings/<int:fid>/status", methods=["POST"])
@@ -340,7 +343,103 @@ def compliance():
 @bp.route("/attack-paths")
 @login_required
 def attack_paths():
-    return render_template("attack_paths.html", g=attack_graph.build(org_id()))
+    return render_template("attack_paths.html", g=attack_graph.build(org_id()), iam_paths=_org_iam_paths())
+
+
+def _org_iam_paths():
+    """v2.3: evidence-based IAM privilege-escalation paths for every AWS integration."""
+    out = []
+    for integ in Integration.query.filter_by(org_id=org_id(), provider="aws").all():
+        if not integ.snapshot:
+            continue
+        try:
+            for p in iam_service.analysis(integ)["paths"]:
+                out.append(dict(p, integration=integ.name, integration_id=integ.id))
+        except Exception as exc:  # analysis problems must never break the page
+            current_app.logger.warning("IAM path analysis failed for integration %s: %s", integ.id, exc)
+    return out
+
+
+# ---------------------------------------------------------------- IAM effective permissions (v2.3)
+def _aws_integrations():
+    return Integration.query.filter_by(org_id=org_id(), provider="aws").order_by(Integration.id).all()
+
+
+@bp.route("/iam")
+@login_required
+def iam_page():
+    items = [i for i in _aws_integrations() if i.snapshot]
+    if not items:
+        return render_template("iam.html", items=[], a=None, integ=None)
+    sel = request.args.get("integration", type=int)
+    integ = next((i for i in items if i.id == sel), items[0])
+    return render_template("iam.html", items=items, integ=integ, a=iam_service.analysis(integ))
+
+
+@bp.route("/iam/<int:iid>/principal/<kind>/<path:name>")
+@login_required
+def iam_principal(iid, kind, name):
+    integ = _integ(iid)
+    if integ.provider != "aws" or kind not in ("user", "role") or not integ.snapshot:
+        abort(404)
+    a = iam_service.analysis(integ)
+    p = a["model"].get(kind, name)
+    if p is None:
+        abort(404)
+    report = next(r for r in a["principals"] if r["arn"] == p.arn)
+    decision = None
+    action = (request.args.get("action") or "").strip()
+    if action:
+        ctx = {}
+        for line in (request.args.get("context") or "").splitlines():
+            if "=" in line:
+                k, _, val = line.partition("=")
+                if k.strip():
+                    ctx[k.strip()] = val.strip()
+        try:
+            decision = iam_service.evaluate_request(integ, kind, name, action[:200],
+                                                    (request.args.get("resource") or "*")[:500], ctx,
+                                                    complete=request.args.get("complete") == "1").to_dict()
+        except iam_service.IamWorkflowError as exc:
+            flash(str(exc), "error")
+    paths = [x for x in a["paths"] if x["start"]["arn"] == p.arn]
+    return render_template("iam_principal.html", integ=integ, p=p, r=report, result=decision, paths=paths,
+                           scp=a["scp"], args=request.args)
+
+
+@bp.route("/findings/<int:fid>/iam-remediation/preview", methods=["POST"])
+@login_required
+@requires("remediate")
+def iam_remediation_preview(fid):
+    f = _finding(fid)
+    try:
+        iam_service.preview(f, current_user.email)
+        flash("Remediation preview created (dry run - nothing was changed).", "success")
+    except iam_service.IamWorkflowError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("views.finding_detail", fid=fid) + "#iam-remediation")
+
+
+@bp.route("/findings/<int:fid>/iam-remediation/<int:rid>/<step>", methods=["POST"])
+@login_required
+@requires("remediate")
+def iam_remediation_step(fid, rid, step):
+    f = _finding(fid)
+    try:
+        if step == "approve":
+            iam_service.approve(f, rid, current_user.email, request.form.get("confirm"))
+            flash("Change approved. Nothing has been applied yet.", "success")
+        elif step == "apply":
+            rem = iam_service.apply(f, rid, current_user.email)
+            flash(rem.output, "success" if rem.status == "verified" else "error")
+        elif step == "verify":
+            rem = iam_service.verify(f, rid, current_user.email)
+            flash(rem.output, "success" if rem.status == "verified" else "error")
+        else:
+            abort(404)
+    except iam_service.IamWorkflowError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("views.finding_detail", fid=fid) + "#iam-remediation")
 
 
 # ---------------------------------------------------------------- integrations

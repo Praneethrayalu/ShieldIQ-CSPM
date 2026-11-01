@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon %}
+{% from "_iam.html" import state, decision, statements, path_card %}
+{% block title %}{{ p.kind|title }} {{ p.name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div style="min-width:0">
+  <a class="crumb" href="{{ url_for('views.iam_page', integration=integ.id) }}">← IAM / {{ integ.name }}</a>
+  <h1>{{ p.kind|title }} <span class="mono">{{ p.name }}</span></h1>
+  <p class="mono small" style="word-break:break-all">{{ p.arn }}</p>
+  <p>{{ state(r.state) }} <span class="tag">full admin: {{ r.admin }}</span> <span class="tag">boundary: {{ p.boundary_status }}</span> <span class="tag">SCPs: {{ scp.status }}</span></p>
+</div></div>
+<div class="grid g-main">
+<div class="stack lg">
+  <section class="card" data-reveal>
+    <div class="card-head"><h3>Permission sources</h3></div>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Policy</th><th>Type</th><th>How it applies</th><th>Document</th></tr></thead><tbody>
+    {% for ref in p.identity %}
+      <tr><td class="mono">{{ ref.name }}{% if ref.version %} <span class="tiny faint">{{ ref.version }}</span>{% endif %}</td><td>{{ ref.kind }}</td>
+        <td>{{ 'direct' if ref.via == 'direct' else ('inherited from group ' ~ ref.via[6:] if ref.via.startswith('group:') else 'role policy') }}</td>
+        <td class="small">{% if ref.document is none %}<span style="color:#b54708">not available ({{ ref.origin }})</span>{% else %}{{ ref.origin }}{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4" class="faint">No identity policies.</td></tr>{% endfor %}
+    {% if p.boundary %}<tr><td class="mono">{{ p.boundary.name }}</td><td>permissions boundary</td><td>limits identity grants</td><td class="small">{{ 'available' if p.boundary.document is not none else 'not available' }}</td></tr>{% endif %}
+    </tbody></table></div>
+    {% if p.groups is not none %}<p class="small">Groups: {{ p.groups|join(', ') if p.groups else 'none' }}</p>{% elif p.kind == 'user' %}<p class="small" style="color:#b54708">Group membership unknown.</p>{% endif %}
+    {% if p.trust_policy %}<details><summary class="small link">Trust policy</summary><pre><code>{{ p.trust_policy|tojson(indent=1) }}</code></pre></details>{% endif %}
+  </section>
+
+  <section class="card" data-reveal id="evaluate">
+    <div class="card-head"><h3>Evaluate a permission</h3><span class="tiny faint">ShieldIQ evaluator, not AWS</span></div>
+    <form method="get" class="stack">
+      <div class="row wrap" style="gap:8px"><input name="action" placeholder="action, e.g. iam:PassRole" value="{{ args.get('action', '') }}" required style="flex:1">
+      <input name="resource" placeholder="resource ARN or *" value="{{ args.get('resource', '*') }}" style="flex:2"></div>
+      <textarea name="context" rows="2" placeholder="optional context keys, one per line: aws:MultiFactorAuthPresent=true">{{ args.get('context', '') }}</textarea>
+      <label class="checkbox small"><input type="checkbox" name="complete" value="1" {{ 'checked' if args.get('complete') == '1' }}> The context above is the complete request context (missing keys follow AWS rules instead of "unknown")</label>
+      <button class="btn primary sm" type="submit">Evaluate</button>
+    </form>
+    {% if result %}
+    <div style="margin-top:12px" data-eval-result="{{ result.decision }}">
+      <p>{{ decision(result.decision) }} <span class="mono small">{{ result.action }}</span> on <span class="mono small">{{ result.resource }}</span> — <span class="small">{{ result.reason }}</span></p>
+      <p class="tiny">Layers: {% for k, v in result.layers.items() %}<span class="tag">{{ k }}: {{ v }}</span> {% endfor %}</p>
+      {% if result.missing %}<div class="hint"><b>Missing data:</b> {{ result.missing|join('; ') }}</div>{% endif %}
+      {% if result.notes %}<div class="hint"><b>Notes:</b> {{ result.notes|join('; ') }}</div>{% endif %}
+      <details open><summary class="small link">Matching statements</summary>{{ statements(result.evidence) }}</details>
+      <p class="tiny faint">Not modelled: {{ result.not_modelled|join(', ') }}.</p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+<div class="stack lg">
+  <section class="card"><div class="card-head"><h3>Escalation capabilities</h3></div>
+    {% for e in r.escalations %}<div class="small" style="margin-bottom:8px"><b>{{ e.title }}</b> <span class="tag">{{ e.confidence }}</span>
+      <details><summary class="tiny link">evidence</summary>{% for ev in e.evidence %}<div class="tiny mono">{{ ev.action }} → {{ ev.decision }}</div>{{ statements(ev.statements) }}{% endfor %}</details></div>
+    {% else %}<p class="small faint">None found in the evaluated permissions.</p>{% endfor %}
+    {% if r.unknown_capabilities %}<div class="hint">Could not be ruled out (missing data): {{ r.unknown_capabilities|join('; ') }}</div>{% endif %}
+  </section>
+  {% for x in paths %}{{ path_card(x) }}{% endfor %}
+</div>
+</div>
+{% endblock %}
