@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ShieldIQSimulator",
+      "Effect": "Allow",
+      "Action": [
+        "iam:SimulatePrincipalPolicy",
+        "iam:SimulateCustomPolicy",
+        "iam:GetContextKeysForPrincipalPolicy",
+        "iam:GetContextKeysForCustomPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ShieldIQAuthorizationDetails",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetAccountAuthorizationDetails",
+        "iam:GetUser",
+        "iam:GetRole",
+        "organizations:DescribeOrganization",
+        "organizations:ListRoots",
+        "organizations:ListParents",
+        "organizations:ListPoliciesForTarget",
+        "organizations:DescribePolicy",
+        "s3:GetBucketPolicy"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

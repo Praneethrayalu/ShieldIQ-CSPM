@@ -1,0 +1,115 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageOnlyValidationPath",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateUser",
+        "iam:DeleteUser",
+        "iam:TagUser",
+        "iam:CreateGroup",
+        "iam:DeleteGroup",
+        "iam:AddUserToGroup",
+        "iam:RemoveUserFromGroup",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:TagRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:PutUserPolicy",
+        "iam:DeleteUserPolicy",
+        "iam:PutGroupPolicy",
+        "iam:DeleteGroupPolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachUserPolicy",
+        "iam:DetachUserPolicy",
+        "iam:AttachGroupPolicy",
+        "iam:DetachGroupPolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutUserPermissionsBoundary",
+        "iam:DeleteUserPermissionsBoundary",
+        "iam:ListUserPolicies",
+        "iam:ListGroupPolicies",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedUserPolicies",
+        "iam:ListAttachedGroupPolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListGroupsForUser",
+        "iam:GetUser",
+        "iam:GetRole",
+        "iam:GetGroup",
+        "iam:ListUserTags",
+        "iam:ListRoleTags",
+        "iam:ListAccessKeys",
+        "iam:GetLoginProfile"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:user/shieldiq-validation/*",
+        "arn:aws:iam::*:group/shieldiq-validation/*",
+        "arn:aws:iam::*:role/shieldiq-validation/*"
+      ]
+    },
+    {
+      "Sid": "ManageOnlyValidationPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy",
+        "iam:DeletePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion",
+        "iam:ListPolicyVersions",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "iam:TagPolicy"
+      ],
+      "Resource": "arn:aws:iam::*:policy/shieldiq-validation/*"
+    },
+    {
+      "Sid": "OnlyTheseManagedPoliciesMayBeAttached",
+      "Effect": "Deny",
+      "Action": [
+        "iam:AttachUserPolicy",
+        "iam:AttachGroupPolicy",
+        "iam:AttachRolePolicy"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::*:policy/shieldiq-validation/*",
+            "arn:aws:iam::aws:policy/AdministratorAccess"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "NeverCreateCredentials",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:UpdateLoginProfile",
+        "iam:CreateServiceSpecificCredential",
+        "iam:UploadSSHPublicKey",
+        "iam:UploadSigningCertificate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadForGuards",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity",
+        "organizations:DescribeOrganization",
+        "iam:ListUsers",
+        "iam:ListRoles",
+        "iam:ListGroups",
+        "iam:ListPolicies",
+        "iam:ListAccountAliases"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

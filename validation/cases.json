@@ -1,0 +1,479 @@
+{
+ "_about": "ShieldIQ IAM validation cases. Every resource lives under IAM path /shieldiq-validation/, is named siqv-*, is tagged shieldiq-validation=true, and has NO credentials (no access keys, no console password). Roles trust only these credential-less users or an AWS service. ${ACCOUNT} is replaced with the test account id at run time.",
+ "path": "/shieldiq-validation/",
+ "tag": {
+  "Key": "shieldiq-validation",
+  "Value": "true"
+ },
+ "managed_policies": [
+  {
+   "name": "siqv-dev-policy",
+   "document": {
+    "Version": "2012-10-17",
+    "Statement": [
+     {
+      "Effect": "Allow",
+      "Action": [
+       "s3:GetObject",
+       "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::siqv-data/*"
+     },
+     {
+      "Effect": "Allow",
+      "Action": "ec2:Describe*",
+      "Resource": "*"
+     }
+    ]
+   }
+  },
+  {
+   "name": "siqv-passrole-ec2",
+   "document": {
+    "Version": "2012-10-17",
+    "Statement": [
+     {
+      "Sid": "PassAdmin",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::${ACCOUNT}:role/shieldiq-validation/siqv-ec2-admin"
+     },
+     {
+      "Sid": "Launch",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "*"
+     }
+    ]
+   }
+  },
+  {
+   "name": "siqv-boundary-s3only",
+   "document": {
+    "Version": "2012-10-17",
+    "Statement": [
+     {
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": "*"
+     }
+    ]
+   }
+  },
+  {
+   "name": "siqv-mfa-policy",
+   "document": {
+    "Version": "2012-10-17",
+    "Statement": [
+     {
+      "Sid": "MfaVersioning",
+      "Effect": "Allow",
+      "Action": "iam:CreatePolicyVersion",
+      "Resource": "arn:aws:iam::${ACCOUNT}:policy/shieldiq-validation/siqv-mfa-policy",
+      "Condition": {
+       "Bool": {
+        "aws:MultiFactorAuthPresent": "true"
+       }
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "groups": [
+  {
+   "name": "siqv-devs",
+   "managed": [
+    "siqv-dev-policy"
+   ],
+   "inline": {}
+  },
+  {
+   "name": "siqv-noiam",
+   "managed": [],
+   "inline": {
+    "DenyIam": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Deny",
+       "Action": "iam:*",
+       "Resource": "*"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "users": [
+  {
+   "name": "siqv-admin",
+   "inline": {
+    "AdminInline": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Sid": "Everything",
+       "Effect": "Allow",
+       "Action": "*",
+       "Resource": "*"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "siqv-dev",
+   "groups": [
+    "siqv-devs"
+   ]
+  },
+  {
+   "name": "siqv-passrole",
+   "managed": [
+    "siqv-passrole-ec2"
+   ]
+  },
+  {
+   "name": "siqv-bounded",
+   "inline": {
+    "IamAll": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Action": "iam:*",
+       "Resource": "*"
+      }
+     ]
+    }
+   },
+   "boundary": "siqv-boundary-s3only"
+  },
+  {
+   "name": "siqv-denied",
+   "groups": [
+    "siqv-noiam"
+   ],
+   "inline": {
+    "AllowAll": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Action": "*",
+       "Resource": "*"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "siqv-mfa",
+   "managed": [
+    "siqv-mfa-policy"
+   ]
+  },
+  {
+   "name": "siqv-reader",
+   "inline": {
+    "ReadNotSecret": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Action": "s3:GetObject",
+       "NotResource": "arn:aws:s3:::siqv-secret/*"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "siqv-assumer",
+   "inline": {
+    "AssumeOps": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Action": "sts:AssumeRole",
+       "Resource": "arn:aws:iam::${ACCOUNT}:role/shieldiq-validation/siqv-ops"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "roles": [
+  {
+   "name": "siqv-ec2-admin",
+   "trust": {
+    "Version": "2012-10-17",
+    "Statement": [
+     {
+      "Effect": "Allow",
+      "Principal": {
+       "Service": "ec2.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+     }
+    ]
+   },
+   "aws_managed": [
+    "arn:aws:iam::aws:policy/AdministratorAccess"
+   ]
+  },
+  {
+   "name": "siqv-ops",
+   "trust": {
+    "Version": "2012-10-17",
+    "Statement": [
+     {
+      "Effect": "Allow",
+      "Principal": {
+       "AWS": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-assumer"
+      },
+      "Action": "sts:AssumeRole"
+     }
+    ]
+   },
+   "inline": {
+    "OpsSelfAttach": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Effect": "Allow",
+       "Action": "iam:AttachRolePolicy",
+       "Resource": "arn:aws:iam::${ACCOUNT}:role/shieldiq-validation/siqv-ops"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "checks": [
+  {
+   "id": "D01",
+   "type": "decision",
+   "polarity": "positive",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-admin",
+   "action": "s3:ListAllMyBuckets",
+   "resource": "*",
+   "expected": "Allowed",
+   "what": "direct inline admin"
+  },
+  {
+   "id": "D02",
+   "type": "decision",
+   "polarity": "positive",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-dev",
+   "action": "s3:PutObject",
+   "resource": "arn:aws:s3:::siqv-data/x",
+   "expected": "Allowed",
+   "what": "group-inherited managed policy"
+  },
+  {
+   "id": "D03",
+   "type": "decision",
+   "polarity": "negative",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-dev",
+   "action": "iam:CreateUser",
+   "resource": "*",
+   "expected": "Denied",
+   "what": "no allow (implicit deny)"
+  },
+  {
+   "id": "D04",
+   "type": "decision",
+   "polarity": "positive",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-passrole",
+   "action": "iam:PassRole",
+   "resource": "arn:aws:iam::${ACCOUNT}:role/shieldiq-validation/siqv-ec2-admin",
+   "expected": "Allowed",
+   "what": "managed policy, scoped PassRole"
+  },
+  {
+   "id": "D05",
+   "type": "decision",
+   "polarity": "negative",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-passrole",
+   "action": "iam:PassRole",
+   "resource": "arn:aws:iam::${ACCOUNT}:role/shieldiq-validation/siqv-ops",
+   "expected": "Denied",
+   "what": "PassRole outside its resource scope"
+  },
+  {
+   "id": "D06",
+   "type": "decision",
+   "polarity": "negative",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-bounded",
+   "action": "iam:CreateUser",
+   "resource": "*",
+   "expected": "Denied",
+   "what": "permissions boundary blocks identity grant"
+  },
+  {
+   "id": "D07",
+   "type": "decision",
+   "polarity": "negative",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-denied",
+   "action": "iam:CreateUser",
+   "resource": "*",
+   "expected": "Denied",
+   "what": "explicit Deny (group) beats Allow *",
+   "aws_raw": "explicitDeny"
+  },
+  {
+   "id": "D08",
+   "type": "decision",
+   "polarity": "positive",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-denied",
+   "action": "s3:ListAllMyBuckets",
+   "resource": "*",
+   "expected": "Allowed",
+   "what": "Allow * outside the Deny"
+  },
+  {
+   "id": "D09",
+   "type": "decision",
+   "polarity": "uncertain",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-mfa",
+   "action": "iam:CreatePolicyVersion",
+   "resource": "arn:aws:iam::${ACCOUNT}:policy/shieldiq-validation/siqv-mfa-policy",
+   "expected": "Indeterminate",
+   "aws_expected": "Denied",
+   "what": "MFA condition without request context: ShieldIQ must say Indeterminate; the simulator treats the missing key as not matching (implicitDeny)"
+  },
+  {
+   "id": "D10",
+   "type": "decision",
+   "polarity": "positive",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-mfa",
+   "action": "iam:CreatePolicyVersion",
+   "resource": "arn:aws:iam::${ACCOUNT}:policy/shieldiq-validation/siqv-mfa-policy",
+   "context": {
+    "aws:MultiFactorAuthPresent": true
+   },
+   "expected": "Allowed",
+   "what": "same, with MFA context supplied"
+  },
+  {
+   "id": "D11",
+   "type": "decision",
+   "polarity": "positive",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-reader",
+   "action": "s3:GetObject",
+   "resource": "arn:aws:s3:::siqv-data/k",
+   "expected": "Allowed",
+   "what": "NotResource allows other buckets"
+  },
+  {
+   "id": "D12",
+   "type": "decision",
+   "polarity": "negative",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-reader",
+   "action": "s3:GetObject",
+   "resource": "arn:aws:s3:::siqv-secret/k",
+   "expected": "Denied",
+   "what": "NotResource excludes the secret bucket"
+  },
+  {
+   "id": "D13",
+   "type": "decision",
+   "polarity": "positive",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-assumer",
+   "action": "sts:AssumeRole",
+   "resource": "arn:aws:iam::${ACCOUNT}:role/shieldiq-validation/siqv-ops",
+   "expected": "Allowed",
+   "what": "identity side of AssumeRole (trust policy checked in the path cases)"
+  },
+  {
+   "id": "P01",
+   "type": "path",
+   "polarity": "positive",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-passrole",
+   "expected": "path",
+   "min_confidence": "confirmed",
+   "what": "PassRole -> EC2 -> admin role"
+  },
+  {
+   "id": "P02",
+   "type": "path",
+   "polarity": "positive",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-assumer",
+   "expected": "path",
+   "min_confidence": "confirmed",
+   "what": "assume siqv-ops -> self-attach policy"
+  },
+  {
+   "id": "P03",
+   "type": "path",
+   "polarity": "uncertain",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-mfa",
+   "expected": "path",
+   "min_confidence": "likely",
+   "what": "MFA-conditional CreatePolicyVersion: reported, not confirmed"
+  },
+  {
+   "id": "P04",
+   "type": "path",
+   "polarity": "negative",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-bounded",
+   "expected": "no_path",
+   "what": "boundary removes iam:* escalation"
+  },
+  {
+   "id": "P05",
+   "type": "path",
+   "polarity": "negative",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-dev",
+   "expected": "no_path",
+   "what": "scoped developer"
+  },
+  {
+   "id": "P06",
+   "type": "path",
+   "polarity": "negative",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-reader",
+   "expected": "no_path",
+   "what": "data reader only"
+  },
+  {
+   "id": "F01",
+   "type": "finding",
+   "polarity": "positive",
+   "rule": "AWS-IAM-005",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-admin",
+   "expected": "Finding",
+   "what": "full admin"
+  },
+  {
+   "id": "F02",
+   "type": "finding",
+   "polarity": "negative",
+   "rule": "AWS-IAM-005",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-bounded",
+   "expected": "Secure",
+   "what": "iam:* neutralised by boundary"
+  },
+  {
+   "id": "F03",
+   "type": "finding",
+   "polarity": "positive",
+   "rule": "AWS-IAM-007",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-passrole",
+   "expected": "Finding",
+   "what": "escalation path"
+  },
+  {
+   "id": "F04",
+   "type": "finding",
+   "polarity": "negative",
+   "rule": "AWS-IAM-007",
+   "principal": "arn:aws:iam::${ACCOUNT}:user/shieldiq-validation/siqv-dev",
+   "expected": "Secure",
+   "what": "no path"
+  }
+ ]
+}

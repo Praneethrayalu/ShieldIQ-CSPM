@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.3.0 - IAM effective-permission analysis (2026-10-31)
+
+All testing is synthetic (botocore `Stubber`, fake sessions, a synthetic IAM lab, an in-memory mock AWS).
+**Live AWS validation has not been executed.** ShieldIQ does not claim complete AWS authorization equivalence; see
+`docs/IAM_ANALYSIS.md` §3.1 for unsupported semantics.
+
+### Added
+- `shieldiq/iam/` - policy language with three-valued logic (`policy.py`), authorization model (`model.py`), evaluator
+  returning Allowed / Denied / Indeterminate with statement evidence (`evaluator.py`), privilege analysis and
+  evidence-based attack paths (`analysis.py`), remediation previews (`remediation.py`), AWS policy-simulator wrapper
+  (`simulate.py`).
+- `shieldiq/collectors/aws_iam.py` - GetAccountAuthorizationDetails (paginated), boundaries, trust policies, SCPs,
+  S3 bucket policies; structured errors with API / resource / code / kind; fallback to per-principal reads.
+- Scan completeness indicator `inv["_sources"]`; `throttled` error kind; adaptive retries for real boto3 sessions;
+  the affected resource is recorded on read errors where known.
+- Unknown / Incomplete as a third check state (`CheckResult.passed = None`, `Evaluation.unknown`,
+  `check_stats[rule]["unknown"]`); Unknown never resolves a finding.
+- Rule `AWS-IAM-007` - evidence-based privilege-escalation path to administrator (with demo/snapshot auto-fix).
+- IAM analysis page, principal page with an evaluate form, IAM paths on the attack-paths page, remediation preview /
+  approve / apply / verify on the finding page; `/api/v1/iam/*` and remediation API; Copilot IAM answers.
+- `validation/` kit (+ `tests/integration/test_live_aws_validation.py`, skipped unless enabled).
+- `shieldiq/sample_data/aws_iam_lab.json` - synthetic IAM lab (12 principals) for tests, demos and the docs.
+- Tests: `tests/test_v23_iam.py` (48), `tests/test_v23_validation_kit.py` (9).
+
+### Changed
+- `AWS-IAM-005` accounts for permissions boundaries, SCPs and explicit denies (an item is dropped only when a layer
+  certainly blocks it; unknown layers are labelled "unconfirmed"); uses the GetAccountAuthorizationDetails model when
+  present; a policy NAME alone is labelled "unverified" and can no longer make a principal "scoped" (Unknown instead);
+  resource ids use the principal's real ARN (including its IAM path) when known.
+- The demo auto-fix for `AWS-IAM-005` also stores the replacement policy's document (an abridged read-only stand-in,
+  labelled as such), because names alone no longer prove a principal is scoped.
+
 ## v2.2.0 - detection-validation fixes (2026-10-31)
 
 Fixes from the detection-validation audit of v2.1.4. Every change below has tests (positive, negative and

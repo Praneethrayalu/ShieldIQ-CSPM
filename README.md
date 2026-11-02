@@ -164,6 +164,43 @@ You can also **register** your own organization, which starts empty.
 5. **Scanners**: download the sample `main.tf` (or upload your own Terraform/YAML) and scan it; paste code into the secret scanner.
 6. **Reports**: generate a SOC 2 PDF.
 
+## IAM effective permissions (v2.3)
+
+ShieldIQ now evaluates **who can actually do what** in an AWS account instead of trusting policy names. Full details:
+[`docs/IAM_ANALYSIS.md`](docs/IAM_ANALYSIS.md).
+
+- **Engine** (`shieldiq/iam/`): explicit Deny → SCPs → resource policies → identity policies (direct, group-inherited,
+  role) + permissions boundaries; `Action`/`NotAction`, `Resource`/`NotResource`, wildcards, policy variables and
+  conditions. Results are **Allowed**, **Denied** or **Indeterminate** with the exact policy statements as evidence and
+  the missing data listed. Unreadable documents, unknown boundaries, unreadable SCPs or missing request context give
+  Indeterminate — never "safe". It does **not** claim full AWS authorization equivalence (session policies,
+  cross-account, RCPs, most resource-policy types are not modelled — see the doc).
+- **Collection**: `iam:GetAccountAuthorizationDetails` (paginated) for boundaries, trust policies, groups and policy
+  versions; AWS Organizations SCPs when readable; S3 bucket policies. A per-source **completeness indicator** with
+  structured errors (API, resource, code, denied/throttled/not_found/error).
+- **Scan states**: every check result is **Secure**, **Finding** or **Unknown / Incomplete**. Unknown is counted
+  separately, is not part of the score and never auto-resolves a finding.
+- **Attack paths** (`AWS-IAM-007`, IAM page, Attack paths page): assume-role, trust-policy rewrite, attach/put/
+  create-version of policies, PassRole to a service, credential takeover — each step with its policy evidence,
+  confidence (confirmed / likely / unverified) and what is missing.
+- **Safe remediation**: dry-run preview with plain-language risk, offending statement, least-privilege proposal,
+  before/after diff, impact, validation, explicit typed approval, apply to stored (demo/snapshot) inventories only,
+  re-scan verification. **Live AWS is never changed** — you get the proposed policy and CLI steps, then *verify by
+  re-scan*.
+- **Copilot** answers IAM questions with *verified facts*, *assumptions* and *missing data* kept apart.
+- **Validation kit** (`validation/`): setup / run / report / cleanup for a dedicated AWS test account, comparing
+  ShieldIQ with `iam:SimulatePrincipalPolicy`. Run here only against an in-memory mock (23/23) —
+  **live AWS validation not executed**.
+
+Try it without AWS: *Integrations → Add → Import JSON* with `shieldiq/sample_data/aws_iam_lab.json` (synthetic lab),
+scan it, then open **IAM analysis**.
+
+Permissions for live scanning: `SecurityAudit` (+ `validation/policies/shieldiq-scanner-extra-policy.json` for the
+simulator). SCPs are readable only from the management/delegated-admin account; elsewhere they show as *unavailable*.
+
+Tests: `pytest -q` (mocked; the live test in `tests/integration/` is skipped unless
+`SHIELDIQ_LIVE_AWS_VALIDATION=1`, `SHIELDIQ_VALIDATION_ACCOUNT` and `AWS_PROFILE` are set).
+
 ## Optional configuration
 
 Copy `.env.example` to `.env`. Every setting is optional:
