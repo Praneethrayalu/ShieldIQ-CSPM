@@ -1,64 +1,113 @@
-# ShieldIQ — Cloud Security Posture Management
+<div align="center">
 
-ShieldIQ scans cloud and SaaS configurations for security misconfigurations, maps every finding to compliance
-frameworks, finds **attack paths** an attacker could chain together, and fixes issues with **verified auto-remediation**.
-It runs fully offline with built-in sample data, so you can try every feature in two minutes with no accounts or API keys.
+# 🛡️ ShieldIQ
 
-> **About this project.** ShieldIQ is a personal portfolio project built by a B.Tech CSE (Cyber Security) student to
-> learn and demonstrate cloud security engineering. It is not a commercial product, it is not deployed anywhere, and no
-> company uses it. The demo workspace "Acme Labs" and all of its data are fictional.
+**Cloud Security Posture Management (CSPM) for AWS misconfigurations and IAM risks, built with Python + Flask.**
 
-## Design
+Scan cloud and SaaS configurations, map every finding to compliance frameworks, trace the **attack paths** an attacker
+could chain together, evaluate **effective IAM permissions**, and fix issues with **verified auto-remediation**.
 
-**Industrial blueprint, minimal.** The visual direction is inspired by a Dribbble reference (an AI-finance landing
-page by a design studio): a light warm-grey canvas, charcoal ink and charcoal sections, **one signal orange** that only
-means *critical* or *the fix*, an extra-wide uppercase grotesk for headlines (Archivo at width 125, vendored),
-small mono labels, a few 1px blueprint hairlines, and isometric 3D objects. Lots of empty space: one idea per section.
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.1-000000?logo=flask&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-boto3%20read--only-FF9900?logo=amazonaws&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-253%20passing-2ea44f)
+![Checks](https://img.shields.io/badge/security%20checks-65-orange)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-- **The 3D ShieldIQ module** (hero, sign-in): an isometric security appliance drawn in SVG (chassis, orange core
-  board with LEDs, glass cover, cap). It assembles on load and its layers pull apart as you scroll (exploded view).
-- **The scroll story** (`/#how`): a pinned section shows one step at a time (Connect → Scan → Prioritise → Fix →
-  Prove) beside an isometric model of the demo's real riskiest attack path (internet → firewall rule → server →
-  access role → customer data). Blocks assemble, a scan sweeps and risky blocks turn orange, the path traces across
-  them, the fix cuts it and they turn safe, and the score rolls up — all with the demo's real numbers.
-- **Inside the app:** a hairline sidebar with mono labels, white cells without outlines, huge numerals, and the same
-  isometric attack-path drawing on the dashboard and the attack-paths page. Light and charcoal dark themes; mobile
-  responsive.
+</div>
 
-All motion is hand-written (`shieldiq/static/js/motion.js` + `landing.js`, no libraries, no CDN), time-based so it runs
-at the same speed on 60/120/144 Hz screens, animates transform/opacity (plus one-shot SVG line draws), and respects
-`prefers-reduced-motion`. Every animation and the reason it exists is listed in [docs/DESIGN.md](docs/DESIGN.md).
+![ShieldIQ landing page](docs/screenshots/01-landing-hero.png)
 
-![Landing page hero](docs/screenshots/01-landing-hero.png)
+> **About this project.** ShieldIQ is a personal portfolio project by a B.Tech CSE (Cyber Security) graduate, built to
+> learn and demonstrate cloud security engineering. It is not a commercial product and no company uses it. The demo
+> workspace "Acme Labs" and all sample data (account IDs, users, keys) are **fictional**; any key-looking strings in
+> the sample data and tests are fake, non-working values used to exercise the secret scanner.
 
-| Scroll story (one step at a time) | Three key features |
+## ✨ Highlights
+
+- **65 security checks** across AWS (21), GCP (9), Azure (9), Kubernetes (9), GitHub (8), Slack (5) and source code (4),
+  each with root cause, impact, step-by-step fix, CLI commands, Terraform/YAML and an auto-fixer.
+- **IAM effective-permission analysis (v2.3):** a policy evaluator that combines explicit Deny, SCPs, resource
+  policies, identity policies and permissions boundaries, and answers **Allowed / Denied / Indeterminate** with the
+  exact policy statements as evidence. Detects privilege-escalation paths to admin (`AWS-IAM-007`).
+- **Attack-path analysis:** a resource graph (internet → network → compute → identity → data) that finds paths to
+  sensitive data and highlights the **choke point**, the single fix that breaks the most paths.
+- **Verified auto-fix:** applies the fix to the stored configuration, re-scans, and only marks the finding resolved if
+  the check now passes. Live cloud accounts are never modified.
+- **Compliance mapping** to CIS, SOC 2, ISO 27001, PCI DSS, GDPR, NIST CSF 2.0 and HIPAA, with PDF reports.
+- **Live read-only scanning** of AWS (boto3, `SecurityAudit`) and GitHub; IaC scanning of Terraform and Kubernetes YAML;
+  a 14-detector secret scanner with entropy checks.
+- **Security Copilot** that answers from your own findings (offline engine, optional OpenAI-compatible LLM).
+- **Secure by design:** RBAC, multi-tenant orgs, CSRF, strict CSP, Fernet-encrypted integration secrets, login
+  throttling, hashed API tokens, full audit log. Denied reads are reported as **Unknown**, never as "secure".
+
+## 🔍 What it checks (AWS)
+
+| Area | Examples |
 |---|---|
-| ![Scroll story](docs/screenshots/02-landing-story.png) | ![Features](docs/screenshots/03-landing-features.png) |
-| **Dashboard (light)** | **Dashboard (dark)** |
-| ![Dashboard light](docs/screenshots/04-dashboard-light.png) | ![Dashboard dark](docs/screenshots/05-dashboard-dark.png) |
-| **Attack paths** | **Finding, fixed and verified** |
-| ![Attack paths](docs/screenshots/06-attack-paths.png) | ![Finding fixed](docs/screenshots/07-finding-fixed.png) |
-| **Security Copilot (dark)** | **Compliance** |
-| ![Copilot](docs/screenshots/08-copilot-dark.png) | ![Compliance](docs/screenshots/09-compliance.png) |
-| **Sign in** | **Error page** |
-| ![Sign in](docs/screenshots/10-sign-in.png) | ![404](docs/screenshots/11-error-404.png) |
+| **IAM** | root MFA and root access keys, weak password policy, access keys older than 90 days, console users without MFA, admin or privilege-escalation permissions from **real policy documents** (`iam:PassRole` + `ec2:RunInstances`, `iam:CreatePolicyVersion`, `AttachUserPolicy`, …), effective-permission escalation paths to admin |
+| **S3** | Block Public Access, public bucket ACLs/policies, default encryption, versioning |
+| **EC2 / VPC** | security groups open to the internet on SSH/RDP/DB ports or all traffic, IMDSv1, unencrypted EBS volumes |
+| **RDS** | publicly accessible instances, unencrypted storage, backup retention under 7 days |
+| **Logging & monitoring** | CloudTrail in all regions, GuardDuty threat detection |
+| **KMS** | customer-managed key rotation |
 
-![Mobile: landing, scroll story, dashboard](docs/screenshots/12-mobile.png)
+Plus GCP, Azure, Kubernetes, GitHub, Slack and source-code checks. The full list with fixes is on the in-app **Rules** page.
 
-**Setup guides** (`/guides`): step-by-step for AWS, GitHub, Google Cloud, Azure, Kubernetes and Slack, covering
-what to click in that platform, what to paste into ShieldIQ, then scanning, fixing, attack paths and compliance PDFs.
-The guides are honest about what's live (AWS, GitHub) and what's a snapshot import. The FAQ lives there too.
+## 🏗️ Architecture
 
-| Setup guide (AWS) | After you connect |
-|---|---|
-| ![Setup guide](docs/screenshots/13-setup-guide.png) | ![After you connect](docs/screenshots/14-guide-after.png) |
+```mermaid
+flowchart LR
+    A[Sources<br/>Demo · JSON snapshot · Terraform/K8s YAML<br/>Live AWS boto3 · Live GitHub API] --> B[Collectors<br/>normalized inventory<br/>+ completeness / read errors]
+    B --> C[Rule engine<br/>65 checks<br/>Secure · Finding · Unknown]
+    B --> I[IAM engine<br/>policy evaluator<br/>escalation paths]
+    C --> D[Scanner<br/>fingerprinted findings<br/>auto-resolve / regressions]
+    I --> D
+    D --> E[Posture score]
+    D --> F[Attack graph<br/>choke points]
+    D --> G[Compliance mapping<br/>PDF / CSV / JSON]
+    D --> H[Remediation<br/>verified auto-fix · scripts · GitHub PR]
+    D --> J[Web UI · REST API · Copilot · Alerts]
+```
 
----
+## 🧰 Tech stack
+
+- **Backend:** Python 3.11, Flask 3, Flask-SQLAlchemy (SQLite by default, any SQLAlchemy URL), Flask-Login, Flask-WTF
+- **Cloud:** boto3 (read-only AWS collector), GitHub REST API
+- **Security:** cryptography (Fernet), CSRF, strict Content-Security-Policy, RBAC
+- **Parsing & reports:** python-hcl2 (Terraform), PyYAML (Kubernetes), ReportLab (PDF)
+- **Frontend:** server-rendered Jinja templates, hand-written CSS/JS and SVG (no framework, no CDN)
+- **Testing:** pytest, botocore `Stubber`, an in-memory mock AWS for the validation kit
+
+## 🔐 How scanning works
+
+1. **Demo mode** (`SHIELDIQ_SEED_DEMO=1`): fictional sample environments so every feature works offline in two minutes.
+2. **Snapshot import:** upload a JSON inventory (templates are downloadable per provider), e.g.
+   `shieldiq/sample_data/aws_iam_lab.json` for the IAM lab.
+3. **Live AWS (read-only):** `pip install -r requirements-cloud.txt`, create a dedicated IAM user with the AWS-managed
+   **`SecurityAudit`** policy, and add an AWS integration in *Live* mode with its access key. Keys are encrypted at rest
+   and are never committed; put local settings in `.env` (see [`.env.example`](.env.example)). ShieldIQ only reads:
+   fixes for live accounts are delivered as scripts / Terraform / a GitHub PR for you to review.
+
+### Sample findings (examples of what a scan reports)
+
+| Severity | Rule | Finding |
+|---|---|---|
+| 🔴 Critical | `AWS-EC2-001` | Security group allows SSH/RDP or database ports from the internet |
+| 🔴 Critical | `AWS-S3-002` | S3 bucket is publicly readable via ACL or bucket policy |
+| 🔴 Critical | `AWS-RDS-001` | RDS database is publicly accessible |
+| 🟠 High | `AWS-IAM-007` | IAM principal has an evidence-based privilege-escalation path to administrator |
+| 🟠 High | `AWS-IAM-005` | IAM principal has full administrator privileges or can escalate to them |
+| 🟠 High | `AWS-EC2-003` | EC2 instance allows IMDSv1 (metadata v2 not required) |
+| 🟡 Medium | `AWS-IAM-004` | IAM access key older than 90 days |
+
+In the demo workspace, the riskiest attack path, **PATH-001**, is: internet → open SSH security group → bastion → IAM role → customer-data bucket. Fixing the
+choke-point security group breaks the path, and the re-scan proves it.
 
 ## Features
 
 **Scanning**
-- **64 security checks** across AWS (20), GCP (9), Azure (9), Kubernetes (9), GitHub (8), Slack (5) and source code (4).
+- **65 security checks** across AWS (21), GCP (9), Azure (9), Kubernetes (9), GitHub (8), Slack (5) and source code (4).
   Every check has a root cause, impact, step-by-step fix, CLI commands and Terraform/YAML, and an auto-fix.
 - **Four ways to connect a source:**
   - *Demo*: realistic sample environments, used for the out-of-the-box demo.
@@ -115,7 +164,8 @@ You need **Python 3.10 or newer** ([python.org](https://www.python.org/downloads
 ### Windows (PowerShell)
 
 ```powershell
-cd ShieldIQ
+git clone https://github.com/Praneethrayalu/ShieldIQ-CSPM.git
+cd ShieldIQ-CSPM
 py -m venv .venv
 .venv\Scripts\Activate.ps1      # if blocked: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 pip install -r requirements.txt
@@ -131,7 +181,8 @@ It needs no admin rights and changes no system settings.
 ### Linux / macOS
 
 ```bash
-cd ShieldIQ
+git clone https://github.com/Praneethrayalu/ShieldIQ-CSPM.git
+cd ShieldIQ-CSPM
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -189,7 +240,7 @@ ShieldIQ now evaluates **who can actually do what** in an AWS account instead of
   re-scan*.
 - **Copilot** answers IAM questions with *verified facts*, *assumptions* and *missing data* kept apart.
 - **Validation kit** (`validation/`): setup / run / report / cleanup for a dedicated AWS test account, comparing
-  ShieldIQ with `iam:SimulatePrincipalPolicy`. Run here only against an in-memory mock (23/23) —
+  ShieldIQ with `iam:SimulatePrincipalPolicy`. So far run against an in-memory mock (23/23) —
   **live AWS validation not executed**.
 
 Try it without AWS: *Integrations → Add → Import JSON* with `shieldiq/sample_data/aws_iam_lab.json` (synthetic lab),
@@ -226,7 +277,7 @@ See `CHANGELOG.md` for what v2.2.0 changed in detection.
 python -m pytest -q
 ```
 
-104 tests cover:
+**253 tests pass** (1 live-AWS test is opt-in and skipped by default). They cover:
 - every rule and every auto-fixer (each fixer must make its own check pass);
 - the Terraform/Kubernetes parsers and the secret detectors;
 - scan sync (idempotency, auto-resolve, regression);
@@ -235,7 +286,8 @@ python -m pytest -q
 - the setup guides page (all six providers);
 - the landing page (public route, demo sign-in, CSP-safe scripts, every referenced asset exists) and the theme toggle;
 - PDF/CSV/JSON reports;
-- the GitHub PR flow, the GitHub and AWS collectors, LLM fallback and Slack delivery.
+- the GitHub PR flow, the GitHub and AWS collectors, LLM fallback and Slack delivery;
+- the v2.2 detection fixes (real IAM policy documents, denied reads as Unknown) and the v2.3 IAM evaluator, attack paths, remediation previews and validation kit.
 
 The network is mocked, so the tests run offline.
 
@@ -275,7 +327,7 @@ shieldiq/
   config.py                settings (.env), auto-generated secrets
   models.py                SQLAlchemy models (orgs, users, integrations, findings, scans, alerts, audit, reports)
   auth.py  views.py  api.py  web routes and REST API
-  rules/                   64 checks + auto-fixers per provider, secret detectors (code.py), rule engine
+  rules/                   65 checks + auto-fixers per provider, secret detectors (code.py), rule engine
   collectors/              demo data, JSON snapshot validation, Terraform/K8s parsers, live GitHub + AWS
   services/                scanner, compliance, attack graph, copilot, remediation, reports, alerts, audit
   templates/  static/      UI (no CDN: Archivo, Inter and Geist Mono are bundled; charts and 3D are server-rendered SVG)
@@ -368,3 +420,77 @@ Its copilot, attack graph and auto-fix also returned fixed demo responses. This 
 - live GitHub and AWS collectors were added;
 - there is a full test suite;
 - it runs offline with one `pip install`.
+
+## Design & UI
+
+**Industrial blueprint, minimal.** The visual direction is inspired by a Dribbble reference (an AI-finance landing
+page by a design studio): a light warm-grey canvas, charcoal ink and charcoal sections, **one signal orange** that only
+means *critical* or *the fix*, an extra-wide uppercase grotesk for headlines (Archivo at width 125, vendored),
+small mono labels, a few 1px blueprint hairlines, and isometric 3D objects. Lots of empty space: one idea per section.
+
+- **The 3D ShieldIQ module** (hero, sign-in): an isometric security appliance drawn in SVG (chassis, orange core
+  board with LEDs, glass cover, cap). It assembles on load and its layers pull apart as you scroll (exploded view).
+- **The scroll story** (`/#how`): a pinned section shows one step at a time (Connect → Scan → Prioritise → Fix →
+  Prove) beside an isometric model of the demo's real riskiest attack path (internet → firewall rule → server →
+  access role → customer data). Blocks assemble, a scan sweeps and risky blocks turn orange, the path traces across
+  them, the fix cuts it and they turn safe, and the score rolls up — all with the demo's real numbers.
+- **Inside the app:** a hairline sidebar with mono labels, white cells without outlines, huge numerals, and the same
+  isometric attack-path drawing on the dashboard and the attack-paths page. Light and charcoal dark themes; mobile
+  responsive.
+
+All motion is hand-written (`shieldiq/static/js/motion.js` + `landing.js`, no libraries, no CDN), time-based so it runs
+at the same speed on 60/120/144 Hz screens, animates transform/opacity (plus one-shot SVG line draws), and respects
+`prefers-reduced-motion`. Every animation and the reason it exists is listed in [docs/DESIGN.md](docs/DESIGN.md).
+
+![Landing page hero](docs/screenshots/01-landing-hero.png)
+
+| Scroll story (one step at a time) | Three key features |
+|---|---|
+| ![Scroll story](docs/screenshots/02-landing-story.png) | ![Features](docs/screenshots/03-landing-features.png) |
+| **Dashboard (light)** | **Dashboard (dark)** |
+| ![Dashboard light](docs/screenshots/04-dashboard-light.png) | ![Dashboard dark](docs/screenshots/05-dashboard-dark.png) |
+| **Attack paths** | **Finding, fixed and verified** |
+| ![Attack paths](docs/screenshots/06-attack-paths.png) | ![Finding fixed](docs/screenshots/07-finding-fixed.png) |
+| **Security Copilot (dark)** | **Compliance** |
+| ![Copilot](docs/screenshots/08-copilot-dark.png) | ![Compliance](docs/screenshots/09-compliance.png) |
+| **Sign in** | **Error page** |
+| ![Sign in](docs/screenshots/10-sign-in.png) | ![404](docs/screenshots/11-error-404.png) |
+
+![Mobile: landing, scroll story, dashboard](docs/screenshots/12-mobile.png)
+
+**Setup guides** (`/guides`): step-by-step for AWS, GitHub, Google Cloud, Azure, Kubernetes and Slack, covering
+what to click in that platform, what to paste into ShieldIQ, then scanning, fixing, attack paths and compliance PDFs.
+The guides are honest about what's live (AWS, GitHub) and what's a snapshot import. The FAQ lives there too.
+
+| Setup guide (AWS) | After you connect |
+|---|---|
+| ![Setup guide](docs/screenshots/13-setup-guide.png) | ![After you connect](docs/screenshots/14-guide-after.png) |
+
+
+## 📚 Documentation
+
+- [`docs/IAM_ANALYSIS.md`](docs/IAM_ANALYSIS.md): how the IAM effective-permission engine works, and its limits
+- [`docs/ShieldIQ_v2.3_IAM_Guide.pdf`](docs/ShieldIQ_v2.3_IAM_Guide.pdf): illustrated guide to the v2.3 IAM features
+- [`docs/DESIGN.md`](docs/DESIGN.md): the design system and every animation
+- [`validation/README.md`](validation/README.md): the live-AWS validation kit
+- [`CHANGELOG.md`](CHANGELOG.md): release notes for v2.2.0 and v2.3.0
+
+## 🗺️ Roadmap
+
+- Live collectors for GCP and Azure (currently demo / snapshot import)
+- More resource-policy types in the IAM engine (KMS, SQS, SNS, Lambda) and session policies
+- Live AWS validation run against a dedicated test account (the validation kit is ready in `validation/`)
+- Scheduled scans with drift notifications, and a Docker image / GitHub Actions workflow for CI gating via `/api/v1/scan/iac`
+- Exportable SARIF for GitHub code scanning
+
+## 👤 Author
+
+**Praneeth Rayalu Repalle** — B.Tech CSE (Cyber Security), Lovely Professional University
+
+- GitHub: [@Praneethrayalu](https://github.com/Praneethrayalu)
+- LinkedIn: [linkedin.com/in/praneeth-rayalu](https://www.linkedin.com/in/praneeth-rayalu)
+- Portfolio: [praneeth.rpr.dpdns.org](https://praneeth.rpr.dpdns.org/)
+
+## 📄 License
+
+Released under the [MIT License](LICENSE).
